@@ -1,0 +1,236 @@
+name: Deploy plans.osdavc.com
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: plans-osdavc-production
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Build happens on GitHub Actions, NOT on cPanel.
+      - name: Build Next.js standalone application
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_API_BASE_URL: /api
+          NEXT_PUBLIC_API_TIMEOUT: "15000"
+        run: |
+          set -e
+
+          npm run build
+
+          if [ ! -f ".next/standalone/server.js" ]; then
+            echo "ERROR: .next/standalone/server.js was not generated."
+            echo "Make sure next.config.ts contains output: 'standalone'."
+            exit 1
+          fi
+
+          # Next.js standalone does not automatically copy these folders.
+          mkdir -p .next/standalone/.next
+          cp -R .next/static .next/standalone/.next/static
+
+          if [ -d "public" ]; then
+            cp -R public .next/standalone/public
+          fi
+
+      - name: Prepare production release
+        run: |
+          set -e
+
+          rm -rf release
+          mkdir -p release
+
+          # Production Next.js standalone application
+          cp -R .next/standalone/. release/
+
+          # Database migration system
+          if [ -d "database" ]; then
+            cp -R database release/database
+          fi
+
+          if [ -d "scripts" ]; then
+            cp -R scripts release/scripts
+          fi
+
+          # Keep package metadata available on the server.
+          cp package.json release/
+
+          if [ -f "package-lock.json" ]; then
+            cp package-lock.json release/
+          fi
+
+          # Optional deployment documentation
+          if [ -f "DEPLOY_SSH.md" ]; then
+            cp DEPLOY_SSH.md release/
+          fi
+
+          # Passenger/cPanel restart directory.
+          mkdir -p release/tmp
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          set -e
+
+          mkdir -p ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          PORT_VALUE="${SSH_PORT:-22}"
+
+          ssh-keyscan \
+            -p "$PORT_VALUE" \
+            -H "$SSH_HOST" \
+            >> ~/.ssh/known_hosts
+
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Test SSH connection
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -e
+
+          PORT_VALUE="${SSH_PORT:-22}"
+
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -p "$PORT_VALUE" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "echo 'SSH connection successful'"
+
+      - name: Verify production environment
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -e
+
+          PORT_VALUE="${SSH_PORT:-22}"
+
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -p "$PORT_VALUE" \
+            "$SSH_USER@$SSH_HOST" \
+            "mkdir -p '$DEPLOY_PATH' && \
+             if [ ! -f '$DEPLOY_PATH/.env' ]; then \
+               echo 'ERROR: Production .env does not exist at $DEPLOY_PATH/.env'; \
+               exit 1; \
+             fi"
+
+      - name: Deploy release over SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -e
+
+          PORT_VALUE="${SSH_PORT:-22}"
+
+          rsync \
+            -az \
+            --delete \
+            --exclude='.env' \
+            --exclude='.git/' \
+            --exclude='.htaccess' \
+            --exclude='storage/' \
+            --exclude='.well-known/' \
+            --exclude='tmp/' \
+            -e "ssh -i ~/.ssh/deploy_key -p $PORT_VALUE" \
+            release/ \
+            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+
+      - name: Run database migrations and restart application
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -e
+
+          PORT_VALUE="${SSH_PORT:-22}"
+
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -p "$PORT_VALUE" \
+            "$SSH_USER@$SSH_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          set -e
+
+          cd "$DEPLOY_PATH"
+
+          echo "Deployment directory:"
+          pwd
+
+          if [ ! -f ".env" ]; then
+            echo "ERROR: Production .env is missing."
+            exit 1
+          fi
+
+          if [ ! -f "server.js" ]; then
+            echo "ERROR: Next.js standalone server.js is missing."
+            exit 1
+          fi
+
+          echo "Node.js version:"
+          node --version
+
+          echo "Running safe database migrations..."
+
+          if [ -f "scripts/db/migrate.js" ]; then
+            node scripts/db/migrate.js
+          else
+            echo "ERROR: scripts/db/migrate.js was not deployed."
+            exit 1
+          fi
+
+          echo "Restarting cPanel/Passenger application..."
+
+          mkdir -p tmp
+          touch tmp/restart.txt
+
+          echo "Deployment completed successfully."
+          REMOTE
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "========================================"
+          echo "Deployment completed successfully"
+          echo "Domain: https://plans.osdavc.com"
+          echo "========================================"

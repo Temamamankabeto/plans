@@ -16,7 +16,7 @@ function clean(params: Record<string, unknown>) {
 
 export const roleDashboardService = {
   async summary(scope: RoleDashboardScope, tab: DashboardTab, filters: RoleDashboardFilters = {}) {
-    const response = await api.get<RoleDashboardResponse>("/admin/dashboard/role-summary", {
+    const response = await api.get<RoleDashboardResponse>("/admin/dashboard/plan-achievement-summary", {
       params: clean({
         scope,
         tab,

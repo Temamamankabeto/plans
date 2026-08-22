@@ -68,7 +68,7 @@ export default function PermissionsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div><h1 className="text-2xl font-bold">Permissions</h1><p className="text-muted-foreground">Manage Spatie permissions for the sanctum guard.</p></div>
+        <div><h1 className="text-2xl font-bold">Permissions</h1><p className="text-muted-foreground">Manage system permissions for Next.js RBAC.</p></div>
         <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" /> New Permission</Button>
       </div>
 
@@ -91,7 +91,7 @@ export default function PermissionsPage() {
                   <TableRow key={permission.id}>
                     <TableCell className="font-medium">{permission.name}</TableCell>
                     <TableCell><Badge variant="secondary" className="capitalize">{moduleName(permission.name)}</Badge></TableCell>
-                    <TableCell><Badge variant="outline">{permission.guard_name ?? "sanctum"}</Badge></TableCell>
+                    <TableCell><Badge variant="outline">{"next-rbac"}</Badge></TableCell>
                     <TableCell>{permission.created_at ? new Date(permission.created_at).toLocaleDateString() : "—"}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu modal={false}>

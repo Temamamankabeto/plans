@@ -1,115 +1,78 @@
 "use client";
 
 import RoleDashboard from "@/components/dashboards/RoleDashboard";
-import { authService } from "@/services/auth/auth.service";
 import type { RoleDashboardScope } from "@/types/dashboard/role-dashboard.type";
 
-type StoredRole = string | { name?: string | null; role?: string | null; title?: string | null } | null | undefined;
-
-const dashboardScopeByRole: Record<string, RoleDashboardScope> = {
-  "super-admin": "super_admin",
-  manager: "manager",
-  "head-of-development-branch": "head_of_development_branch",
-  "head-of-service-branch": "head_of_service_branch",
-  "team-leader": "team_leader",
-  expert: "expert",
-  secretory: "secretory",
-  secretary: "secretory",
-  "record-officer": "record_officer",
-  accountant: "accountant",
-
-  // Legacy aliases kept so old stored users do not break.
-  superadmin: "super_admin",
-  "super-admins": "super_admin",
-  "planning-budget-team-leader": "team_leader",
-  "planning-and-budget-team-leader": "team_leader",
-  "budget-team-leader": "team_leader",
-  "planning-budget-expert": "expert",
-  "planning-budget-experts": "expert",
-  "planning-and-budget-expert": "expert",
-  "asset-team-leader": "team_leader",
-  "machinery-team-leader": "team_leader",
-  "payment-requester": "secretory",
-  "procurement-requester": "secretory",
-  "records-office": "record_officer",
-  "record-office": "record_officer",
-  finance: "accountant",
-  "finance-accountant": "accountant",
+const roleAliases: Record<string, RoleDashboardScope> = {
+  super_admin: "super_admin",
+  "super admin": "super_admin",
+  "head of office": "head_of_office",
+  "hogganaa waajjiraa": "head_of_office",
+  "deputy head of office": "deputy_head_of_office",
+  "itti aanaa itti gaafatamaa waajjiraa": "deputy_head_of_office",
+  manager: "head_of_office",
+  adviser: "expert",
+  advisor: "expert",
+  advisory: "expert",
+  director: "director",
+  directora: "director",
+  "team leader": "team_leader",
+  "expert": "expert",
+  "oggeessa": "expert",
+  "agriculture coffee and tea director": "agriculture_coffee_tea_director",
+  "directorate of coffee and tea development": "agriculture_coffee_tea_director",
+  "agriculture fruit director": "agriculture_fruit_director",
+  "directorate of fruit development": "agriculture_fruit_director",
+  "agriculture crop director": "agriculture_crop_director",
+  "directorate of crop development": "agriculture_crop_director",
+  "agriculture livestock director": "agriculture_livestock_director",
+  "directorate of livestock development": "agriculture_livestock_director",
+  "agriculture job creation director": "agriculture_job_creation_director",
+  "directorate of job creation and skills development": "agriculture_job_creation_director",
+  "vegetable development expert": "agriculture_vegetable_expert",
+  "horticulture expert": "agriculture_vegetable_expert",
+  "cooperative market director": "cooperative_market_director",
+  "market development director": "cooperative_market_director",
+  "cooperative job creation director": "cooperative_job_creation_director",
+  "industry value addition director": "industry_value_addition_director",
+  "directorate of industry development and value addition": "industry_value_addition_director",
+  "industry job creation director": "industry_job_creation_director",
+  "trade coffee tea spice director": "trade_coffee_tea_spice_director",
+  "directorate of coffee tea and spice development": "trade_coffee_tea_spice_director",
+  "trade fruit vegetable director": "trade_fruit_vegetable_director",
+  "directorate of fruit and vegetable development": "trade_fruit_vegetable_director",
+  "trade crop director": "trade_crop_director",
+  "directorate of crop market development": "trade_crop_director",
+  "trade livestock director": "trade_livestock_director",
+  "directorate of livestock and livestock products development": "trade_livestock_director",
+  "agricultural value chain monitoring manager": "president_agriculture_value_chain_manager",
+  "manufacturing value chain monitoring manager": "president_manufacturing_value_chain_manager",
+  "investment monitoring manager": "president_investment_manager",
+  "job creation monitoring manager": "president_job_creation_manager",
 };
 
-const budgetVisibleRoleKeys = new Set([
-  "manager",
-  "head-of-development-branch",
-  "head-of-service-branch",
-]);
-
-function roleText(role: StoredRole) {
-  if (!role) return "";
-  if (typeof role === "string") return role;
-  return role.name ?? role.role ?? role.title ?? "";
-}
-
-function normalizeText(value?: string | null) {
+function normalizeRole(value?: string | null) {
   return String(value ?? "")
-    .toLowerCase()
     .trim()
-    .replace(/&/g, "and")
-    .replace(/[_\s]+/g, "-")
-    .replace(/-+/g, "-");
+    .toLowerCase()
+    .replace(/[&]/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
-function normalizeDashboardRoleKey(role: StoredRole) {
-  const key = normalizeText(roleText(role));
-  return key && dashboardScopeByRole[key] ? key : null;
-}
+function getCurrentUserRole(): RoleDashboardScope {
+  if (typeof window === "undefined") return "super_admin";
 
-function getDepartmentName(user: any) {
-  return (
-    user?.department?.name ??
-    user?.department_name ??
-    user?.departmentName ??
-    user?.department ??
-    ""
-  );
-}
-
-function isBudgetDepartment(user: any) {
-  const departmentKey = normalizeText(getDepartmentName(user));
-
-  return departmentKey === "budget-department" || departmentKey.includes("budget");
-}
-
-function canShowBudgetDashboard(roleKey: string, user: any) {
-  if (budgetVisibleRoleKeys.has(roleKey)) return true;
-
-  if (["team-leader", "expert", "planning-budget-team-leader", "planning-budget-experts"].includes(roleKey)) {
-    return isBudgetDepartment(user);
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const storedRoles = JSON.parse(localStorage.getItem("roles") || "[]");
+    const role = user?.role ?? user?.display_role ?? user?.roles?.[0]?.name ?? user?.roles?.[0] ?? storedRoles?.[0]?.name ?? storedRoles?.[0];
+    return roleAliases[normalizeRole(role)] ?? "expert";
+  } catch {
+    return "expert";
   }
-
-  return false;
-}
-
-function resolveDashboardRoleKey(user: any, storedRoles: StoredRole[]) {
-  const candidates: StoredRole[] = [
-    user?.role,
-    ...(Array.isArray(user?.roles) ? user.roles : []),
-    ...storedRoles,
-  ];
-
-  for (const candidate of candidates) {
-    const roleKey = normalizeDashboardRoleKey(candidate);
-    if (roleKey) return roleKey;
-  }
-
-  return "manager";
 }
 
 export default function DashboardIndexPage() {
-  const user = authService.getStoredUser();
-  const storedRoles = authService.getStoredRoles() as StoredRole[];
-  const roleKey = resolveDashboardRoleKey(user, storedRoles);
-  const scope = dashboardScopeByRole[roleKey] ?? "manager";
-  const showBudget = canShowBudgetDashboard(roleKey, user);
-
-  return <RoleDashboard scope={scope} showBudget={showBudget} />;
+  return <RoleDashboard scope={getCurrentUserRole()} />;
 }

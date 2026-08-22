@@ -1,0 +1,5 @@
+import { NextRequest } from "next/server";
+import { query, transaction } from "@/lib/server/db";
+import { ok } from "@/lib/server/response";
+export async function GET(_:NextRequest,{params}:{params:Promise<{id:string}>}){ const {id}=await params; const rows=await query<any[]>(`SELECT p.id,p.name,p.description FROM permissions p INNER JOIN role_permissions rp ON rp.permission_id=p.id WHERE rp.role_id=? ORDER BY p.name`,[id]); return ok(rows); }
+export async function POST(request:NextRequest,{params}:{params:Promise<{id:string}>}){ const {id}=await params; const body=await request.json().catch(()=>({})); const permissions:Array<string>=Array.isArray(body.permissions)?body.permissions:[]; await transaction(async(conn)=>{ await conn.execute(`DELETE FROM role_permissions WHERE role_id=?`,[id]); for(const name of permissions){ const [rows]:any=await conn.execute(`SELECT id FROM permissions WHERE name=? LIMIT 1`,[name]); if(rows[0]) await conn.execute(`INSERT INTO role_permissions (role_id,permission_id) VALUES (?,?)`,[id,rows[0].id]); }}); return ok({role_id:id,assigned_count:permissions.length,permissions},'Permissions assigned successfully'); }

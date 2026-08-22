@@ -4,6 +4,7 @@ import type {
   AssignUserRolePayload,
   CreateUserPayload,
   DepartmentItem,
+  DirectorateItem,
   OfficeItem,
   PaginatedResponse,
   PermissionItem,
@@ -11,54 +12,16 @@ import type {
   ResetUserPasswordPayload,
   RoleItem,
   RoleListParams,
+  TeamItem,
   UpdateUserPayload,
   UserItem,
   UserListParams,
 } from "@/types/user-management/user.type";
 
-function hasUserFiles(payload: CreateUserPayload | UpdateUserPayload) {
-  return Boolean(
-    (payload as any).signature instanceof File ||
-      (payload as any).stamp instanceof File ||
-      (payload as any).titer instanceof File,
-  );
-}
-
-function toUserFormData(
-  payload: CreateUserPayload | UpdateUserPayload | Record<string, unknown>,
-  options: { includeEmptyNullable?: boolean } = {},
-) {
-  const form = new FormData();
-
-  Object.entries(payload as Record<string, unknown>).forEach(([key, value]) => {
-    if (value === undefined) return;
-
-    if (key === "signature" || key === "stamp" || key === "titer") {
-      if (value instanceof File) {
-        form.append(key, value);
-      }
-      return;
-    }
-
-    if (value === null || value === "") {
-      if (options.includeEmptyNullable) {
-        form.append(key, "");
-      }
-      return;
-    }
-
-    form.append(key, String(value));
-  });
-
-  return form;
-}
-
 function cleanParams<T extends Record<string, unknown>>(params: T = {} as T) {
   const out: Record<string, unknown> = {};
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "" && value !== "all") {
-      out[key] = value;
-    }
+    if (value !== undefined && value !== null && value !== "" && value !== "all") out[key] = value;
   });
   return out;
 }
@@ -66,7 +29,6 @@ function cleanParams<T extends Record<string, unknown>>(params: T = {} as T) {
 function paginated<T>(body: any): PaginatedResponse<T> {
   const data = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
   const meta = body?.meta ?? {};
-
   return {
     success: body?.success,
     message: body?.message,
@@ -92,30 +54,12 @@ export const userService = {
   },
 
   async create(payload: CreateUserPayload) {
-    const hasFiles = hasUserFiles(payload);
-    const body = hasFiles ? toUserFormData(payload) : payload;
-
-    const response = await api.post(
-      "/admin/users",
-      body,
-      hasFiles ? { headers: { "Content-Type": "multipart/form-data" } } : undefined,
-    );
-
+    const response = await api.post("/admin/users", payload);
     return unwrap<ApiEnvelope<UserItem>>(response);
   },
 
   async update(id: number | string, payload: UpdateUserPayload) {
-    // Always use multipart + method spoofing for updates so Laravel receives
-    // signature, stamp, and titer files consistently.
-    const body = toUserFormData(
-      { ...(payload as Record<string, unknown>), _method: "PUT" },
-      { includeEmptyNullable: true },
-    );
-
-    const response = await api.post(`/admin/users/${id}`, body, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-
+    const response = await api.put(`/admin/users/${id}`, payload);
     return unwrap<ApiEnvelope<UserItem>>(response);
   },
 
@@ -149,12 +93,19 @@ export const userService = {
     return Array.isArray(response.data?.data) ? (response.data.data as OfficeItem[]) : [];
   },
 
-  async departmentsLite(params: { office_id?: number | string | null } = {}) {
-    const response = await api.get("/admin/departments", {
-      params: cleanParams({ ...params, all: true }),
-    });
+  async directoratesLite(params: { office_id?: number | string | null; department_id?: number | string | null } = {}) {
+    const response = await api.get("/admin/users/directorates-lite", { params: cleanParams(params) });
+    return Array.isArray(response.data?.data) ? (response.data.data as DirectorateItem[]) : [];
+  },
 
+  async departmentsLite(params: { office_id?: number | string | null } = {}) {
+    const response = await api.get("/admin/departments", { params: cleanParams({ ...params, all: 1, status: "active" }) });
     return Array.isArray(response.data?.data) ? (response.data.data as DepartmentItem[]) : [];
+  },
+
+  async teamsLite(params: { directorate_id?: number | string | null } = {}) {
+    const response = await api.get("/admin/users/teams-lite", { params: cleanParams(params) });
+    return Array.isArray(response.data?.data) ? (response.data.data as TeamItem[]) : [];
   },
 
   async roles(params: RoleListParams = {}) {

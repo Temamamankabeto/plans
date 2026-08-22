@@ -1,4 +1,5 @@
 import api, { unwrap } from "@/lib/api";
+import type { AuthUser } from "@/services/auth/auth.service";
 
 type ApiEnvelope<T> = {
   success: boolean;
@@ -14,6 +15,11 @@ export type ChangePasswordPayload = {
 };
 
 export const profileService = {
+  async getProfile() {
+    const response = await api.get("/auth/me");
+    return unwrap<ApiEnvelope<AuthUser>>(response).data;
+  },
+
   async changePassword(payload: ChangePasswordPayload) {
     const response = await api.post("/profile/change-password", payload);
     return unwrap<ApiEnvelope<null>>(response);

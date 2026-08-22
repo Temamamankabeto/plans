@@ -12,4 +12,4 @@ export interface PaginatedResponse<T> {
   meta: PaginationMeta;
 }
 
-export type LaravelPaginatedResponse<T> = PaginatedResponse<T>;
+export type ApiPaginatedResponse<T> = PaginatedResponse<T>;

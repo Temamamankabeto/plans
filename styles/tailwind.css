@@ -5,7 +5,7 @@
 :root {
   --radius: 0.75rem;
 
-  /* Core municipality palette */
+  /* Core plan monitoring palette */
   --background: oklch(0.985 0.006 235);
   --foreground: oklch(0.22 0.035 245);
 
@@ -15,7 +15,7 @@
   --popover: oklch(1 0.004 235);
   --popover-foreground: oklch(0.22 0.035 245);
 
-  /* Civic municipality primary */
+  /* Plan monitoring primary */
   --primary: oklch(0.45 0.16 255);
   --primary-foreground: oklch(0.985 0.006 235);
 
@@ -27,7 +27,7 @@
   --muted: oklch(0.955 0.018 235);
   --muted-foreground: oklch(0.48 0.035 245);
 
-  /* Accent: municipality teal */
+  /* Accent: monitoring teal */
   --accent: oklch(0.9 0.055 190);
   --accent-foreground: oklch(0.26 0.07 205);
 
@@ -40,7 +40,7 @@
 
   /* Charts for dashboard */
   --chart-1: oklch(0.52 0.16 255);  /* civic blue */
-  --chart-2: oklch(0.62 0.12 190);  /* municipality teal */
+  --chart-2: oklch(0.62 0.12 190);  /* monitoring teal */
   --chart-3: oklch(0.62 0.1 145);   /* service green */
   --chart-4: oklch(0.78 0.14 85);   /* public works gold */
   --chart-5: oklch(0.6 0.18 25);    /* alert red */

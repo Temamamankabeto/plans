@@ -1,13 +1,25 @@
 {
-  "name": "aig-digital-restaurant-frontend",
+  "name": "plan-achievement-nextjs",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=18.18.0"
+  },
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
     "build": "next build",
     "start": "next start -p $PORT",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:create": "node scripts/db/create-database.js",
+    "db:migrate": "node scripts/db/migrate.js",
+    "db:seed": "node scripts/db/seed.js",
+    "db:setup": "npm run db:create && npm run db:migrate && npm run db:seed",
+    "db:reset": "node scripts/db/reset.js",
+    "db:migrate:fresh": "node scripts/db/migrate.js --fresh",
+    "db:seed:fresh": "node scripts/db/seed.js --fresh",
+    "db:setup:fresh": "npm run db:fresh",
+    "db:fresh": "npm run db:create && npm run db:migrate:fresh && npm run db:seed"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "1.1.14",
@@ -52,7 +64,10 @@
     "tailwindcss": "^3.4.17",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "1.1.2",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "mysql2": "^3.15.3",
+    "bcryptjs": "^3.0.3",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
     "@types/node": "22.13.10",
@@ -62,6 +77,7 @@
     "eslint": "9.22.0",
     "eslint-config-next": "15.2.4",
     "postcss": "^8.4.49",
-    "typescript": "5.8.2"
+    "typescript": "5.8.2",
+    "@types/jsonwebtoken": "^9.0.10"
   }
 }

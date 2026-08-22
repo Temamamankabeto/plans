@@ -1,8 +1,48 @@
-export type ApiEnvelope<T> = { success: boolean; message?: string; data: T; meta?: PaginationMeta };
-export type PaginationMeta = { current_page: number; per_page: number; total: number; last_page: number };
-export type PaginatedResponse<T> = { success?: boolean; message?: string; data: T[]; meta: PaginationMeta };
-export type OfficeType = "city" | "subcity" | "woreda" | "zone";
-export type OfficeStatusFilter = "active" | "inactive" | "all";
-export type OfficeItem = { id: number; name: string; code?: string | null; type: OfficeType; parent_id?: number | null; parent?: OfficeItem | null; children?: OfficeItem[]; is_active?: boolean; can_delete?: boolean; children_count?: number; users_count?: number; citizens_count?: number; created_at?: string; updated_at?: string };
-export type OfficeListParams = { search?: string; type?: OfficeType | "all"; status?: OfficeStatusFilter; parent_id?: number | string | null; city_id?: number | string | null; subcity_id?: number | string | null; woreda_id?: number | string | null; all?: boolean; page?: number; per_page?: number };
-export type OfficePayload = { name: string; code?: string; type: OfficeType; parent_id?: number | string | null; is_active?: boolean };
+export type OfficeType = "office" | "directorate" | "agency" | "bureau" | "president_office";
+export type OfficeStatusFilter = "all" | "active" | "inactive";
+
+export type OfficeItem = {
+  id: number;
+  name: string;
+  code: string;
+  type: OfficeType | string;
+  parent_id: number | null;
+  parent_name?: string | null;
+  description?: string | null;
+  directorates_count?: number;
+  users_count?: number;
+  plans_count?: number;
+  is_active: boolean | number;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type OfficePayload = {
+  name: string;
+  code?: string | null;
+  type?: OfficeType | string | null;
+  parent_id?: number | null;
+  description?: string | null;
+  is_active?: boolean | number;
+};
+
+export type OfficeListParams = {
+  search?: string;
+  type?: OfficeType | string;
+  status?: OfficeStatusFilter;
+  parent_id?: number | string | null;
+  page?: number;
+  per_page?: number;
+  all?: boolean;
+};
+
+export type DepartmentItem = {
+  id: number;
+  name: string;
+  office_id?: number | null;
+  users_count?: number;
+  status?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};

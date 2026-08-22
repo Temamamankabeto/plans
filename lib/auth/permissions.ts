@@ -33,7 +33,7 @@ export function getStoredRoles(): string[] {
 export function isGeneralAdmin(roles: string[] = getStoredRoles()) {
   return roles.some((role) => {
     const normalized = normalize(role);
-    return normalized === "super_admin" || normalized === "general_admin" || normalized === "admin" || normalized === "administrator";
+    return normalized === "super_admin" || normalized === "admin" || normalized === "administrator";
   });
 }
 
@@ -72,104 +72,34 @@ export function usePermissions() {
   );
 }
 
-export const procurementPermissions = {
-  read: "procurement.read",
-  create: "procurement.create",
-  update: "procurement.update",
-  submit: "procurement.submit",
-  review: "procurement.review",
-  approve: "procurement.approve",
-  reject: "procurement.reject",
-  forward: "procurement.forward",
-  assignBudgetCode: "procurement.assign-budget-code",
-  prepareForm: "procurement.form.prepare",
-  print: "procurement.print",
-  complete: "procurement.complete",
+export const planPermissions = {
+  read: "plans.view",
+  create: "plans.create",
+  update: "plans.update",
+  approve: "plans.approve",
 } as const;
 
-export const paymentPermissions = {
-  read: "payment.read",
-  create: "payment.create",
-  update: "payment.update",
-  submit: "payment.submit",
-  review: "payment.review",
-  approve: "payment.approve",
-  reject: "payment.reject",
-  forward: "payment.forward",
-  verifyBudget: "payment.verify-budget",
-  prepareForm: "payment.form.prepare",
-  process: "payment.process",
-  print: "payment.print",
-  disburse: "payment.disburse",
-  complete: "payment.complete",
+export const achievementPermissions = {
+  read: "achievements.view",
+  create: "achievements.create",
+  update: "achievements.update",
+  approve: "achievements.approve",
 } as const;
 
 export const userManagementPermissions = {
-  usersRead: "users.read",
+  usersRead: "users.view",
   usersCreate: "users.create",
   usersUpdate: "users.update",
   usersDelete: "users.delete",
   usersToggle: "users.toggle",
   usersResetPassword: "users.reset-password",
-  rolesRead: "roles.read",
+  rolesRead: "roles.view",
   rolesCreate: "roles.create",
   rolesUpdate: "roles.update",
-  rolesAssign: "roles.assign",
+  rolesDelete: "roles.delete",
   rolesAssignPermissions: "roles.assign-permissions",
-  permissionsRead: "permissions.read",
+  permissionsRead: "permissions.view",
   permissionsCreate: "permissions.create",
   permissionsUpdate: "permissions.update",
   permissionsDelete: "permissions.delete",
-} as const;
-
-export const inventoryPermissions = {
-  read: "inventory.read",
-  create: "inventory.items.create",
-  update: "inventory.items.update",
-  delete: "inventory.items.delete",
-  adjust: "inventory.adjustments.create",
-  waste: "inventory.waste.create",
-  movements: "inventory.movements.read",
-  batches: "inventory.batches.read",
-  lowStock: "inventory.low_stock.read",
-  valuation: "inventory.valuation.read",
-  receive: "stock.receive",
-  recipesRead: "recipes.read",
-  recipesCreate: "recipes.create",
-  recipesUpdate: "recipes.update",
-  recipeIntegrity: "recipes.integrity.read",
-} as const;
-
-export const purchasePermissions = {
-  suppliersRead: "suppliers.read",
-  suppliersCreate: "suppliers.create",
-  suppliersUpdate: "suppliers.update",
-  ordersRead: "purchase_orders.read",
-  ordersCreate: "purchase_orders.create",
-  ordersSubmit: "purchase_orders.submit",
-  ordersApprove: "purchase_orders.approve",
-  ordersReceive: "purchase_orders.receive",
-  requestsCreate: "purchase_requests.create",
-  requestsApprove: "purchase_requests.approve",
-} as const;
-
-export const tablePermissions = {
-  read: "tables.read",
-  create: "tables.create",
-  update: "tables.update",
-  assign: "tables.assign",
-  transfer: "tables.transfer",
-  summary: "tables.summary",
-  history: "tables.history",
-  sections: "tables.sections",
-  statusUpdate: "tables.status.update",
-  toggle: "tables.toggle",
-} as const;
-
-export const menuPermissions = {
-  read: "menu.read",
-  create: "menu.create",
-  update: "menu.update",
-  disable: "menu.disable",
-  delete: "menu.delete",
 } as const;

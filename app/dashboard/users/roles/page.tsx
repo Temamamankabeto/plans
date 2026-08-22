@@ -1,9 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Edit, KeyRound, Loader2, MoreHorizontal, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Edit, KeyRound, Loader2, MoreHorizontal, RefreshCw, Search, Trash2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,13 +14,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   useAllPermissionsQuery,
   useAssignRolePermissionsMutation,
-  useCreateRoleMutation,
   useDeleteRoleMutation,
   useRolePermissionsQuery,
   useRolesQuery,
   useUpdateRoleMutation,
 } from "@/hooks";
 import { roleSchema } from "@/lib/schemas/role.schema";
+import { isGeneralAdmin } from "@/lib/auth/permissions";
 import type { RoleItem, RolePayload } from "@/types/user-management/user.type";
 import { authService } from "@/services/auth/auth.service";
 
@@ -50,21 +49,18 @@ export default function RolesPage() {
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
 
   const storedPermissions = authService.getStoredPermissions();
-  const canCreateRole = hasPermission(storedPermissions, "roles.create");
   const canUpdateRole = hasPermission(storedPermissions, "roles.update");
   const canDeleteRole = hasPermission(storedPermissions, "roles.delete");
   const canAssignPermissions =
-    hasPermission(storedPermissions, "roles.assign-permissions") || hasPermission(storedPermissions, "permissions.assign");
+    isGeneralAdmin() ||
+    hasPermission(storedPermissions, "roles.assign-permissions") ||
+    hasPermission(storedPermissions, "permissions.assign");
 
   const params = useMemo(() => ({ search, page, per_page: 10 }), [search, page]);
   const rolesQuery = useRolesQuery(params);
   const permissionsCatalogQuery = useAllPermissionsQuery();
   const rolePermissionsQuery = useRolePermissionsQuery(selectedRole?.id);
 
-  const createRole = useCreateRoleMutation(() => {
-    setFormOpen(false);
-    setRoleName("");
-  });
   const updateRole = useUpdateRoleMutation(() => {
     setFormOpen(false);
     setSelectedRole(null);
@@ -105,12 +101,6 @@ export default function RolesPage() {
     window.setTimeout(action, 0);
   }
 
-  function openCreate() {
-    setSelectedRole(null);
-    setRoleName("");
-    setFormOpen(true);
-  }
-
   function openEdit(role: RoleItem) {
     setSelectedRole(role);
     setRoleName(role.name);
@@ -134,12 +124,9 @@ export default function RolesPage() {
     const result = roleSchema.safeParse({ name: roleName?.trim() });
     if (!result.success) return;
 
+    if (!selectedRole) return;
     const payload: RolePayload = { name: result.data.name };
-    if (selectedRole) {
-      updateRole.mutate({ id: selectedRole.id, payload });
-      return;
-    }
-    createRole.mutate(payload);
+    updateRole.mutate({ id: selectedRole.id, payload });
   }
 
   function confirmDeleteRole() {
@@ -172,13 +159,8 @@ export default function RolesPage() {
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-bold">Roles</h1>
-          <p className="text-muted-foreground">View roles and assign allowed backend permissions.</p>
+          <p className="text-muted-foreground">View roles and assign allowed system permissions.</p>
         </div>
-        {canCreateRole ? (
-          <Button onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" /> New Role
-          </Button>
-        ) : null}
       </div>
 
       <Card>
@@ -214,15 +196,13 @@ export default function RolesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Guard</TableHead>
-                  <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={2} className="py-8 text-center text-muted-foreground">
                       No roles found
                     </TableCell>
                   </TableRow>
@@ -230,39 +210,38 @@ export default function RolesPage() {
                   rows.map((role) => (
                     <TableRow key={role.id}>
                       <TableCell className="font-medium">{role.name}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{role.guard_name ?? "sanctum"}</Badge>
-                      </TableCell>
-                      <TableCell>{role.created_at ? new Date(role.created_at).toLocaleDateString() : "—"}</TableCell>
                       <TableCell className="text-right">
-                        <DropdownMenu modal={false}>
-                          <DropdownMenuTrigger asChild>
-                            <Button type="button" variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
+                        <div className="flex items-center justify-end gap-2">
+                          {canAssignPermissions ? (
+                            <Button type="button" variant="outline" size="sm" onClick={() => openPermissions(role)}>
+                              <KeyRound className="mr-2 h-4 w-4" />
+                              Assign Permissions
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {canUpdateRole ? (
-                              <DropdownMenuItem onSelect={() => runAfterMenuClose(() => openEdit(role))}>
-                                <Edit className="mr-2 h-4 w-4" /> Edit
-                              </DropdownMenuItem>
-                            ) : null}
-                            {canAssignPermissions ? (
-                              <DropdownMenuItem onSelect={() => runAfterMenuClose(() => openPermissions(role))}>
-                                <KeyRound className="mr-2 h-4 w-4" /> Assign permissions
-                              </DropdownMenuItem>
-                            ) : null}
-                            {canDeleteRole ? (
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                disabled={isProtectedRole(role)}
-                                onSelect={() => runAfterMenuClose(() => openDelete(role))}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" /> Delete
-                              </DropdownMenuItem>
-                            ) : null}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                          ) : null}
+                          <DropdownMenu modal={false}>
+                            <DropdownMenuTrigger asChild>
+                              <Button type="button" variant="ghost" size="icon" aria-label={`Actions for ${role.name}`}>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {canUpdateRole ? (
+                                <DropdownMenuItem onSelect={() => runAfterMenuClose(() => openEdit(role))}>
+                                  <Edit className="mr-2 h-4 w-4" /> Edit
+                                </DropdownMenuItem>
+                              ) : null}
+                              {canDeleteRole ? (
+                                <DropdownMenuItem
+                                  className="text-destructive focus:text-destructive"
+                                  disabled={isProtectedRole(role)}
+                                  onSelect={() => runAfterMenuClose(() => openDelete(role))}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -292,16 +271,16 @@ export default function RolesPage() {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{selectedRole ? "Edit Role" : "Create Role"}</DialogTitle>
-            <DialogDescription>Role names must exist with the sanctum guard in the backend.</DialogDescription>
+            <DialogTitle>Edit Role</DialogTitle>
+            <DialogDescription>Role names must exist in the Next.js RBAC configuration.</DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={submitRole}>
             <div className="grid gap-2">
               <Label>Role Name</Label>
               <Input value={roleName} onChange={(event) => setRoleName(event.target.value)} placeholder="Cashier" required />
             </div>
-            <Button className="w-full" disabled={createRole.isPending || updateRole.isPending}>
-              {(createRole.isPending || updateRole.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button className="w-full" disabled={updateRole.isPending}>
+              {updateRole.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save role
             </Button>
           </form>

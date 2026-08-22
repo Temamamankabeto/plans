@@ -1,0 +1,6 @@
+import { NextRequest } from "next/server";
+import { execute, query } from "@/lib/server/db";
+import { created, fail, ok, paginated } from "@/lib/server/response";
+import { pagination } from "@/lib/server/crud";
+export async function GET(request:NextRequest){ const all=request.nextUrl.searchParams.get('all'); const search=request.nextUrl.searchParams.get('search'); const where=search?'WHERE name LIKE ?':''; const params=search?[`%${search}%`]:[]; if(all){ return ok(await query<any[]>(`SELECT id,name,description,created_at,updated_at FROM roles ${where} ORDER BY name`,params)); } const {page,perPage,offset}=pagination(request); const count=await query<any[]>(`SELECT COUNT(*) total FROM roles ${where}`,params); const rows=await query<any[]>(`SELECT id,name,description,created_at,updated_at FROM roles ${where} ORDER BY name LIMIT ? OFFSET ?`,[...params,perPage,offset]); return paginated(rows,page,perPage,Number(count[0]?.total??0)); }
+export async function POST(request:NextRequest){ const body=await request.json().catch(()=>({})); if(!body.name) return fail('Role name is required',422); const r=await execute(`INSERT INTO roles (name,description) VALUES (?,?)`,[body.name,body.description||null]); return created({id:r.insertId,name:body.name},'Role created successfully'); }

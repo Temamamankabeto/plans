@@ -1,62 +1,86 @@
 export type RoleDashboardScope =
   | "super_admin"
-  | "manager"
-  | "head_of_development_branch"
-  | "head_of_service_branch"
+  | "head_of_office"
+  | "deputy_head_of_office"
+  | "director"
   | "team_leader"
   | "expert"
-  | "secretory"
-  | "accountant"
-  | "record_officer";
+  | "agriculture_coffee_tea_director"
+  | "agriculture_fruit_director"
+  | "agriculture_crop_director"
+  | "agriculture_livestock_director"
+  | "agriculture_job_creation_director"
+  | "agriculture_vegetable_expert"
+  | "cooperative_market_director"
+  | "cooperative_job_creation_director"
+  | "industry_value_addition_director"
+  | "industry_job_creation_director"
+  | "trade_coffee_tea_spice_director"
+  | "trade_fruit_vegetable_director"
+  | "trade_crop_director"
+  | "trade_livestock_director"
+  | "president_agriculture_value_chain_manager"
+  | "president_manufacturing_value_chain_manager"
+  | "president_investment_manager"
+  | "president_job_creation_manager";
 
-export type DashboardTab = "budget" | "procurement" | "payment";
+export type DashboardTab = "plan" | "achievement" | "report";
 
 export type RoleDashboardFilters = {
   fiscal_year?: string;
-  category?: string;
-  type?: string;
+  quarter?: string;
+  month?: string;
+  office?: string;
+  value_chain?: string;
+  indicator?: string;
+  status?: string;
   date_preset?: "" | "all" | "this_week" | "this_month" | "custom";
   date_from?: string;
   date_to?: string;
-  status?: string;
-  bi_code?: string;
-  account_code?: string;
 };
 
-export type DashboardPaymentRow = {
+export type DashboardPlanRow = {
   id: number | string;
-  payment_no?: string | null;
-  category?: string | null;
-  type?: string | null;
-  approved_amount?: number | string | null;
-  paid_amount?: number | string | null;
+  plan_no?: string | null;
+  office?: string | null;
+  directorate?: string | null;
+  value_chain?: string | null;
+  indicator?: string | null;
+  unit?: string | null;
+  annual_target?: number | string | null;
+  quarterly_target?: number | string | null;
+  month?: string | null;
+  fiscal_year?: string | null;
   status?: string | null;
-  allocated_budget_code?: string | null;
-  approved_date?: string | null;
 };
 
-export type DashboardProcurementRow = {
+export type DashboardAchievementRow = {
   id: number | string;
-  procurement_no?: string | null;
-  customer_name?: string | null;
-  category?: string | null;
-  type?: string | null;
-  budget_code?: string | null;
-  amount?: number | string | null;
+  achievement_no?: string | null;
+  office?: string | null;
+  directorate?: string | null;
+  value_chain?: string | null;
+  indicator?: string | null;
+  unit?: string | null;
+  target?: number | string | null;
+  achieved?: number | string | null;
+  achievement_percent?: number | string | null;
+  fiscal_year?: string | null;
+  period?: string | null;
   status?: string | null;
-  approved_date?: string | null;
+  submitted_at?: string | null;
 };
 
-export type DashboardBudgetRow = {
+export type DashboardReportRow = {
   id: number | string;
-  account_code?: string | null;
-  account_description?: string | null;
-  adjusted_budget?: number | string | null;
-  balance_not_committed?: number | string | null;
-  debit?: number | string | null;
-  credit?: number | string | null;
+  office?: string | null;
+  report_type?: string | null;
+  value_chain?: string | null;
+  period?: string | null;
+  total_target?: number | string | null;
+  total_achieved?: number | string | null;
+  performance_percent?: number | string | null;
   status?: string | null;
-  bi_code?: string | null;
 };
 
 export type RoleDashboardChartRow = {
@@ -68,9 +92,9 @@ export type RoleDashboardChartRow = {
 export type RoleDashboardCharts = Record<string, RoleDashboardChartRow[]>;
 
 export type RoleDashboardData = {
-  payments: DashboardPaymentRow[];
-  procurements: DashboardProcurementRow[];
-  budgets: DashboardBudgetRow[];
+  plans: DashboardPlanRow[];
+  achievements: DashboardAchievementRow[];
+  reports: DashboardReportRow[];
   charts: RoleDashboardCharts;
 };
 

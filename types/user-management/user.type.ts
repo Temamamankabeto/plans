@@ -1,87 +1,74 @@
 import type { OfficeItem } from "@/types/location/office.type";
 
-export type ApiEnvelope<T> = {
-  success: boolean;
-  message?: string;
-  data: T;
-  meta?: unknown;
-};
-
-export type PaginationMeta = {
-  current_page: number;
-  per_page: number;
-  total: number;
-  last_page: number;
-};
-
-export type PaginatedResponse<T> = {
-  success?: boolean;
-  message?: string;
-  data: T[];
-  meta: PaginationMeta;
-};
-
-export type AdminLevel = "city" | "subcity" | "woreda" | "zone";
-export type ProfessionalLevel = "III" | "IV";
+export type ApiEnvelope<T> = { success: boolean; message?: string; data: T; meta?: unknown };
+export type PaginationMeta = { current_page: number; per_page: number; total: number; last_page: number };
+export type PaginatedResponse<T> = { success?: boolean; message?: string; data: T[]; meta: PaginationMeta };
 export type UserStatus = "active" | "disabled";
-
 export type UserRoleName =
   | "Super Admin"
+  | "Head of Office"
+  | "Deputy Head of Office"
   | "Manager"
-  | "Head of Development Branch"
-  | "Head of Service Branch"
+  | "Adviser"
+  | "Director"
   | "Team Leader"
-  | "Expert"
-  | "Secretory"
-  | "Accountant"
-  | "Record Officer";
+  | "Expert";
+
+export type RoleItem = { id: number; name: UserRoleName | string; created_at?: string; updated_at?: string };
+export type PermissionItem = { id: number; name: string; created_at?: string; updated_at?: string };
+
+export type DirectorateItem = {
+  id: number;
+  office_id: number;
+  department_id?: number | null;
+  name: string;
+  office_name?: string | null;
+  department_name?: string | null;
+  is_active?: boolean | number;
+  created_at?: string;
+  updated_at?: string;
+};
 
 export type DepartmentItem = {
   id: number;
   office_id: number;
   name: string;
+  office_name?: string | null;
+  is_active?: boolean | number;
 };
 
-export type RoleItem = {
+export type TeamItem = {
   id: number;
-  name: UserRoleName | string;
-  guard_name?: string;
-  created_at?: string;
-  updated_at?: string;
-};
-
-export type PermissionItem = {
-  id: number;
+  directorate_id: number;
+  department_id?: number | null;
+  office_id?: number;
   name: string;
-  guard_name?: string;
+  directorate_name?: string | null;
+  department_name?: string | null;
+  office_name?: string | null;
+  is_active?: boolean | number;
   created_at?: string;
   updated_at?: string;
 };
 
 export type UserItem = {
   id: number;
-  created_by?: number | null;
   name: string;
   email: string;
   phone?: string | null;
-  address?: string | null;
   status?: UserStatus;
   role?: UserRoleName | string | null;
   display_role?: UserRoleName | string | null;
   roles?: Array<RoleItem | string>;
-  admin_level?: AdminLevel | null;
-  professional_level?: ProfessionalLevel | null;
+  professional_level?: string | null;
   office_id?: number | null;
+  directorate_id?: number | null;
   department_id?: number | null;
-  sub_city_id?: number | null;
-  woreda_id?: number | null;
-  zone_id?: number | null;
+  team_id?: number | null;
   office?: OfficeItem | null;
+  directorate?: DirectorateItem | null;
   department?: DepartmentItem | null;
-  sub_city?: OfficeItem | null;
-  woreda?: OfficeItem | null;
-  zone?: OfficeItem | null;
-  profile_image_url?: string | null;
+  team?: TeamItem | null;
   signature_url?: string | null;
   stamp_url?: string | null;
   titer_url?: string | null;
@@ -94,12 +81,10 @@ export type UserListParams = {
   search?: string;
   status?: UserStatus | "all";
   role?: UserRoleName | string;
-  admin_level?: AdminLevel | "all";
   office_id?: number | string | null;
   department_id?: number | string | null;
-  sub_city_id?: number | string | null;
-  woreda_id?: number | string | null;
-  zone_id?: number | string | null;
+  directorate_id?: number | string | null;
+  team_id?: number | string | null;
   page?: number;
   per_page?: number;
 };
@@ -110,14 +95,12 @@ export type CreateUserPayload = {
   phone: string;
   password: string;
   role: UserRoleName | string;
-  admin_level?: AdminLevel | null;
-  professional_level?: ProfessionalLevel | null;
-  address?: string;
+  status?: UserStatus;
+  professional_level?: string | null;
   office_id?: number | null;
+  directorate_id?: number | null;
   department_id?: number | null;
-  sub_city_id?: number | null;
-  woreda_id?: number | null;
-  zone_id?: number | null;
+  team_id?: number | null;
   signature?: File | null;
   stamp?: File | null;
   titer?: File | null;

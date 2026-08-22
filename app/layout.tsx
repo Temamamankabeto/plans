@@ -3,8 +3,8 @@ import "./globals.css";
 import Providers from "@/providers/AppProviders";
 
 export const metadata: Metadata = {
-  title: "Manucipality Authomation",
-  description: "Role-based Manucipality Authomation",
+  title: "Plan & Achievement System",
+  description: "Role-based value chain plan and achievement system",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -4,35 +4,30 @@ import Link from "next/link";
 import { useMemo, useState, type ElementType } from "react";
 import {
   Activity,
-  ArrowUpRight,
-  Banknote,
   BarChart3,
-  BriefcaseBusiness,
   Building2,
+  CalendarDays,
   CheckCircle2,
-  Clock3,
+  ChevronRight,
+  ClipboardList,
   Eye,
   FileCheck2,
-  FileText,
+  Filter,
   Gauge,
-  Landmark,
+  Layers3,
   Loader2,
-  PackageCheck,
-  Plus,
-  Printer,
   RefreshCcw,
   Search,
-  Send,
-  ShieldCheck,
+  Target,
   TrendingUp,
   Users,
-  WalletCards,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -50,1749 +45,425 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRoleDashboard } from "@/hooks/dashboard/use-role-dashboard";
-import { useTranslation } from "react-i18next";
 import type {
+  DashboardAchievementRow,
+  DashboardPlanRow,
+  DashboardReportRow,
   DashboardTab,
+  RoleDashboardChartRow,
   RoleDashboardFilters,
   RoleDashboardScope,
 } from "@/types/dashboard/role-dashboard.type";
 
 type Props = { scope: RoleDashboardScope; showBudget?: boolean };
-type ChartRow = {
-  label?: string | null;
-  name?: string | null;
-  value: number | string;
-};
-type KpiDefinition = {
+type KpiItem = { title: string; value: string | number; subtitle: string; icon: ElementType };
+
+type RoleConfig = {
   title: string;
-  value: string | number;
-  description: string;
-  icon: ElementType;
-  href?: string;
+  role: string;
+  office: string;
+  access: string;
+  canApprove: boolean;
+  canSubmit: boolean;
 };
 
-type RoleContentConfig = {
-  title: string;
-  subtitle: string;
-  badge: string;
-  paymentTableTitle: string;
-  procurementTableTitle: string;
-  overviewTables: string[];
-  chartTitles: string[];
-};
-
-const roleContent: Record<RoleDashboardScope, RoleContentConfig> = {
+const genericRoleConfig: Record<string, RoleConfig> = {
   super_admin: {
-    title: "Super Admin Dashboard",
-    subtitle:
-      "System administration summary for users, offices, departments, payment, procurement, and workflow activity.",
-    badge: "Administration",
-    paymentTableTitle: "Recent Payments",
-    procurementTableTitle: "Recent Procurements",
-    overviewTables: [
-      "Recent User Activities",
-      "Audit Logs",
-      "Payment Categories",
-      "Procurement Types",
-    ],
-    chartTitles: [
-      "Payment Status Distribution",
-      "Procurement Status Distribution",
-      "Monthly Transactions",
-    ],
+    title: "Executive Control Dashboard",
+    role: "Super Admin",
+    office: "All Offices",
+    access: "Full system administration, monitoring and reporting access",
+    canApprove: true,
+    canSubmit: false,
   },
-  manager: {
-    title: "Manager Dashboard",
-    subtitle:
-      "Approval command center for pending approvals, approved requests, workload, and budget visibility.",
-    badge: "Approval",
-    paymentTableTitle: "Pending Payments",
-    procurementTableTitle: "Pending Procurements",
-    overviewTables: [
-      "Recently Approved Payments",
-      "Recently Approved Procurements",
-    ],
-    chartTitles: [
-      "Payment Status",
-      "Procurement Status",
-      "Approval Trends",
-      "Budget Utilization",
-    ],
+  head_of_office: {
+    title: "Head of Office Dashboard",
+    role: "Head of Office",
+    office: "Assigned Office",
+    access: "Office-level approval, performance review and reporting access",
+    canApprove: true,
+    canSubmit: false,
   },
-  head_of_development_branch: {
-    title: "Head of Development Branch Dashboard",
-    subtitle:
-      "Branch review dashboard for payments, procurements, returned requests, and monthly approvals.",
-    badge: "Development Branch",
-    paymentTableTitle: "Payments Awaiting Review",
-    procurementTableTitle: "Procurements Awaiting Review",
-    overviewTables: ["Recently Approved Requests"],
-    chartTitles: [
-      "Approval Trends",
-      "Monthly Approved Amount",
-      "Budget Utilization",
-    ],
+  deputy_head_of_office: {
+    title: "Deputy Head of Office Dashboard",
+    role: "Deputy Head of Office",
+    office: "Assigned Office",
+    access: "Operational follow-up and approval support access",
+    canApprove: true,
+    canSubmit: false,
   },
-  head_of_service_branch: {
-    title: "Head of Service Branch Dashboard",
-    subtitle:
-      "Service branch review dashboard for payments, procurements, returned requests, and monthly approvals.",
-    badge: "Service Branch",
-    paymentTableTitle: "Payments Awaiting Review",
-    procurementTableTitle: "Procurements Awaiting Review",
-    overviewTables: ["Recently Approved Requests"],
-    chartTitles: [
-      "Approval Trends",
-      "Monthly Approved Amount",
-      "Budget Utilization",
-    ],
+  director: {
+    title: "Director Dashboard",
+    role: "Director",
+    office: "Assigned Office",
+    access: "Directorate-level plan and achievement management access",
+    canApprove: true,
+    canSubmit: true,
   },
   team_leader: {
     title: "Team Leader Dashboard",
-    subtitle:
-      "Team queue for budget reviews, expert assignment, approvals, and open workload tracking.",
-    badge: "Team Queue",
-    paymentTableTitle: "Pending Payments",
-    procurementTableTitle: "Pending Procurements",
-    overviewTables: ["Assigned Experts", "Pending Expert Assignments"],
-    chartTitles: ["Monthly Approvals"],
+    role: "Team Leader",
+    office: "Assigned Office",
+    access: "Team-level plan follow-up and achievement reporting access",
+    canApprove: false,
+    canSubmit: true,
   },
   expert: {
     title: "Expert Dashboard",
-    subtitle:
-      "Assigned work dashboard for pending reviews, completed reviews, payments, and procurements.",
-    badge: "Expert Workbench",
-    paymentTableTitle: "Assigned Payments",
-    procurementTableTitle: "Assigned Procurements",
-    overviewTables: ["Completed Requests"],
-    chartTitles: ["Assigned vs Completed"],
-  },
-  record_officer: {
-    title: "Record Officer Dashboard",
-    subtitle:
-      "Record processing dashboard for remaining print, exit print, sent to finance, and completed records.",
-    badge: "Records",
-    paymentTableTitle: "Payments Ready For Records",
-    procurementTableTitle: "Procurements Ready For Records",
-    overviewTables: ["Sent To Finance List"],
-    chartTitles: ["Records Processing Trend", "Exit Processing Trend"],
-  },
-  accountant: {
-    title: "Accountant Dashboard",
-    subtitle:
-      "Finance dashboard for pending finance payments, paid payments, paid amount, and finance history.",
-    badge: "Finance",
-    paymentTableTitle: "Pending Finance Payments",
-    procurementTableTitle: "Finance Procurement Reference",
-    overviewTables: ["Paid Payments", "Finance History"],
-    chartTitles: [
-      "Paid By Category",
-      "Monthly Payment Trend",
-      "Paid By Payment Type",
-    ],
-  },
-  secretory: {
-    title: "Secretory Dashboard",
-    subtitle:
-      "Requester dashboard for own payment requests, procurement requests, pending, approved, and returned work.",
-    badge: "Requester",
-    paymentTableTitle: "My Payments",
-    procurementTableTitle: "My Procurements",
-    overviewTables: ["Returned Requests"],
-    chartTitles: ["My Requests Status", "Monthly Requests"],
+    role: "Expert",
+    office: "Assigned Office",
+    access: "Assigned activity and achievement entry access",
+    canApprove: false,
+    canSubmit: true,
   },
 };
 
-const budgetVisibleScopes = new Set<RoleDashboardScope>([
-  "manager",
-  "head_of_development_branch",
-  "head_of_service_branch",
-  "team_leader",
-  "expert",
-]);
+const roleConfig: Partial<Record<RoleDashboardScope, RoleConfig>> = {
+  ...genericRoleConfig,
+  agriculture_coffee_tea_director: { ...genericRoleConfig.director, title: "Coffee & Tea Performance Dashboard", office: "Bureau of Agriculture" },
+  agriculture_fruit_director: { ...genericRoleConfig.director, title: "Fruit Performance Dashboard", office: "Bureau of Agriculture" },
+  agriculture_crop_director: { ...genericRoleConfig.director, title: "Crop Performance Dashboard", office: "Bureau of Agriculture" },
+  agriculture_livestock_director: { ...genericRoleConfig.director, title: "Livestock Performance Dashboard", office: "Bureau of Agriculture" },
+  agriculture_job_creation_director: { ...genericRoleConfig.director, title: "Agriculture Job Creation Dashboard", office: "Bureau of Agriculture" },
+  agriculture_vegetable_expert: { ...genericRoleConfig.expert, title: "Vegetable Achievement Dashboard", office: "Bureau of Agriculture" },
+  cooperative_market_director: { ...genericRoleConfig.director, title: "Cooperative Market Dashboard", office: "Cooperative Agency" },
+  cooperative_job_creation_director: { ...genericRoleConfig.director, title: "Cooperative Job Creation Dashboard", office: "Cooperative Agency" },
+  industry_value_addition_director: { ...genericRoleConfig.director, title: "Industry & Value Addition Dashboard", office: "Bureau of Industry and Investment" },
+  industry_job_creation_director: { ...genericRoleConfig.director, title: "Industry Job Creation Dashboard", office: "Bureau of Industry and Investment" },
+  trade_coffee_tea_spice_director: { ...genericRoleConfig.director, title: "Coffee, Tea & Spice Trade Dashboard", office: "Bureau of Trade and Regional Integration" },
+  trade_fruit_vegetable_director: { ...genericRoleConfig.director, title: "Fruit & Vegetable Trade Dashboard", office: "Bureau of Trade and Regional Integration" },
+  trade_crop_director: { ...genericRoleConfig.director, title: "Crop Market Dashboard", office: "Bureau of Trade and Regional Integration" },
+  trade_livestock_director: { ...genericRoleConfig.director, title: "Livestock Products Trade Dashboard", office: "Bureau of Trade and Regional Integration" },
+  president_agriculture_value_chain_manager: { ...genericRoleConfig.head_of_office, title: "Agricultural Value Chain Dashboard", role: "Value Chain Manager", office: "President Office" },
+  president_manufacturing_value_chain_manager: { ...genericRoleConfig.head_of_office, title: "Manufacturing Value Chain Dashboard", role: "Value Chain Manager", office: "President Office" },
+  president_investment_manager: { ...genericRoleConfig.head_of_office, title: "Investment Monitoring Dashboard", role: "Investment Manager", office: "President Office" },
+  president_job_creation_manager: { ...genericRoleConfig.head_of_office, title: "Job Creation Monitoring Dashboard", role: "Job Creation Manager", office: "President Office" },
+};
 
-const paymentOnlyScopes = new Set<RoleDashboardScope>(["accountant"]);
-
-const moneyFormatter = new Intl.NumberFormat(undefined, {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-function translationKey(value?: string | null) {
-  return String(value ?? "")
-    .toLowerCase()
-    .trim()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function useDbTranslation() {
-  const { t, i18n } = useTranslation();
-
-  return (value?: string | null) => {
-    const text = String(value ?? "");
-    const key = translationKey(text);
-
-    if (!key) return text;
-
-    // Touch the active language so React re-renders all dashboard labels
-    // immediately after the database-driven language switch.
-    void i18n.language;
-
-    const translated = t(key);
-    return translated && translated !== key ? translated : text;
-  };
-}
+const numberFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+const compactFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1, notation: "compact" });
+const TABLE_PAGE_SIZE = 8;
 
 function toNumber(value: unknown) {
   const number = Number(value ?? 0);
   return Number.isFinite(number) ? number : 0;
 }
 
-function money(value: unknown) {
-  return `ETB ${moneyFormatter.format(toNumber(value))}`;
+function formatNumber(value: unknown) {
+  return numberFormatter.format(toNumber(value));
 }
 
-function compactMoney(value: unknown) {
-  const amount = toNumber(value);
-  if (amount >= 1_000_000_000)
-    return `ETB ${(amount / 1_000_000_000).toFixed(2)}B`;
-  if (amount >= 1_000_000) return `ETB ${(amount / 1_000_000).toFixed(2)}M`;
-  if (amount >= 1_000) return `ETB ${(amount / 1_000).toFixed(1)}K`;
-  return money(amount);
-}
-
-function date(value?: string | null) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString();
-}
-
-function statusLabel(value?: string | null) {
-  return String(value ?? "-").replaceAll("_", " ");
+function formatCompact(value: unknown) {
+  return compactFormatter.format(toNumber(value));
 }
 
 function normalize(value?: string | null) {
   return String(value ?? "").toLowerCase();
 }
 
-function isPendingStatus(status?: string | null) {
-  const value = normalize(status);
-  return (
-    Boolean(value) &&
-    !value.includes("paid") &&
-    !value.includes("completed") &&
-    !value.includes("approved") &&
-    !value.includes("reject") &&
-    !value.includes("cancel")
-  );
-}
-
-function isApprovedStatus(status?: string | null) {
-  const value = normalize(status);
-  return (
-    value.includes("approved") ||
-    value.includes("completed") ||
-    value.includes("sent_to_finance") ||
-    value.includes("paid")
-  );
-}
-
-function isReturnedStatus(status?: string | null) {
-  const value = normalize(status);
-  return value.includes("return") || value.includes("reject");
-}
-
 function statusTone(status?: string | null) {
-  const value = normalize(status);
-  if (
-    value.includes("paid") ||
-    value.includes("completed") ||
-    value.includes("approved")
-  )
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (
-    value.includes("reject") ||
-    value.includes("return") ||
-    value.includes("cancel")
-  )
-    return "border-red-200 bg-red-50 text-red-700";
-  if (value.includes("draft"))
-    return "border-slate-200 bg-slate-50 text-slate-700";
-  return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
-function chartLabel(row: ChartRow) {
+function statusLabel(value?: string | null) {
+  return String(value ?? "-").replaceAll("_", " ");
+}
+
+function getChartLabel(row: RoleDashboardChartRow) {
   return row.label ?? row.name ?? "-";
 }
 
-function chartValue(row: ChartRow) {
-  return toNumber(row.value);
-}
-
-function updateFilter(
-  setFilters: (value: RoleDashboardFilters) => void,
-  filters: RoleDashboardFilters,
-  key: keyof RoleDashboardFilters,
-  value: string,
-) {
+function filterUpdate(setFilters: (value: RoleDashboardFilters) => void, filters: RoleDashboardFilters, key: keyof RoleDashboardFilters, value: string) {
   setFilters({ ...filters, [key]: value === "all" ? "" : value });
 }
 
-function KpiCard({
-  title,
-  value,
-  description,
-  icon: Icon,
-  href,
-}: KpiDefinition) {
-  const tt = useDbTranslation();
-  const content = (
-    <Card className="group min-w-0 overflow-hidden rounded-2xl border bg-card shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <CardContent className="relative p-5">
-        <div className="absolute right-4 top-4 rounded-full bg-primary/10 p-3 text-primary">
-          <Icon className="h-5 w-5" />
-        </div>
-        <p className="pr-14 text-sm font-medium text-muted-foreground">
-          {tt(title)}
-        </p>
-        <p className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">
-          {value}
-        </p>
-        <p className="mt-2 text-xs text-muted-foreground">{tt(description)}</p>
-        {href ? (
-          <ArrowUpRight className="absolute bottom-4 right-4 h-4 w-4 text-muted-foreground transition group-hover:text-primary" />
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-
-  return href ? <Link href={href}>{content}</Link> : content;
+function getPageRows<T>(rows: T[], page: number) {
+  const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
+  const safePage = Math.min(Math.max(page, 1), totalPages);
+  const start = (safePage - 1) * TABLE_PAGE_SIZE;
+  const end = start + TABLE_PAGE_SIZE;
+  return { rows: rows.slice(start, end), page: safePage, totalPages, start: rows.length ? start + 1 : 0, end: Math.min(end, rows.length) };
 }
 
-function DonutChart({
-  title,
-  rows = [],
-  amount = false,
-}: {
-  title: string;
-  rows?: ChartRow[];
-  amount?: boolean;
-}) {
-  const tt = useDbTranslation();
-  const sorted = [...rows]
-    .sort((a, b) => chartValue(b) - chartValue(a))
-    .slice(0, 5);
-  const total = sorted.reduce((sum, row) => sum + chartValue(row), 0);
-
+function KpiCard({ title, value, subtitle, icon: Icon }: KpiItem) {
   return (
-    <Card className="min-w-0 rounded-2xl border bg-card shadow-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between gap-2 text-sm font-semibold">
-          <span className="flex items-center gap-2">
-            <Gauge className="h-4 w-4 text-primary" />
-            {tt(title)}
-          </span>
-          <Badge variant="secondary">{tt("Top")} {sorted.length || 0}</Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="mx-auto flex h-36 w-36 items-center justify-center rounded-full border-[18px] border-primary/20 bg-primary/5 text-center">
+    <Card className="overflow-hidden rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs text-muted-foreground">{tt("Total")}</p>
-            <p className="text-lg font-bold">
-              {amount ? compactMoney(total) : total}
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+            <p className="mt-2 text-3xl font-bold tracking-tight text-slate-900">{value}</p>
+            <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+          </div>
+          <div className="rounded-xl bg-slate-900 p-2.5 text-slate-900">
+            <Icon className="h-5 w-5" />
           </div>
         </div>
-        <div className="min-w-0 space-y-2">
-          {sorted.length ? (
-            sorted.map((row, index) => {
-              const percent = total
-                ? Math.round((chartValue(row) / total) * 100)
-                : 0;
-              return (
-                <div
-                  key={`${title}-${chartLabel(row)}-${index}`}
-                  className="flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">
-                      {tt(chartLabel(row))}
-                    </p>
-                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-primary"
-                        style={{ width: `${Math.max(percent, 4)}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="shrink-0 text-muted-foreground">
-                    {amount ? compactMoney(chartValue(row)) : chartValue(row)}
-                  </span>
-                </div>
-              );
-            })
-          ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              {tt("No chart data available.")}
-            </p>
-          )}
-        </div>
       </CardContent>
     </Card>
   );
 }
 
-function BarChartCard({
-  title,
-  rows = [],
-  amount = false,
-}: {
-  title: string;
-  rows?: ChartRow[];
-  amount?: boolean;
-}) {
-  const tt = useDbTranslation();
-  const sorted = [...rows]
-    .sort((a, b) => chartValue(b) - chartValue(a))
-    .slice(0, 7);
-  const max = Math.max(...sorted.map(chartValue), 1);
+function PowerBiBarChart({ title, rows = [], percentage = false }: { title: string; rows?: RoleDashboardChartRow[]; percentage?: boolean }) {
+  const sorted = [...rows].sort((a, b) => toNumber(b.value) - toNumber(a.value)).slice(0, 8);
+  const max = Math.max(...sorted.map((row) => toNumber(row.value)), 1);
 
   return (
-    <Card className="min-w-0 rounded-2xl border bg-card shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-          <BarChart3 className="h-4 w-4 text-primary" />
-          {tt(title)}
+    <Card className="rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200">
+      <CardHeader className="border-b px-4 py-3">
+        <CardTitle className="flex items-center gap-2 text-sm font-bold text-slate-900">
+          <BarChart3 className="h-4 w-4 text-slate-700" />
+          {title}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {sorted.length ? (
-          sorted.map((row, index) => {
-            const width = Math.max(
-              6,
-              Math.round((chartValue(row) / max) * 100),
-            );
-            return (
-              <div
-                key={`${title}-${chartLabel(row)}-${index}`}
-                className="space-y-1"
-              >
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="truncate font-medium">
-                    {tt(chartLabel(row))}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {amount ? compactMoney(chartValue(row)) : chartValue(row)}
-                  </span>
-                </div>
-                <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${width}%` }}
-                  />
-                </div>
+      <CardContent className="space-y-3 p-4">
+        {sorted.length ? sorted.map((row, index) => {
+          const value = toNumber(row.value);
+          const width = Math.max(4, Math.round((value / max) * 100));
+          return (
+            <div key={`${title}-${index}`} className="grid grid-cols-[minmax(110px,1fr)_2fr_72px] items-center gap-3 text-xs">
+              <span className="truncate font-medium text-slate-700">{getChartLabel(row)}</span>
+              <div className="h-5 overflow-hidden rounded-sm bg-slate-100">
+                <div className="h-full rounded-sm bg-slate-700" style={{ width: `${width}%` }} />
               </div>
-            );
-          })
-        ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            {tt("No chart data available.")}
-          </p>
+              <span className="text-right font-bold text-slate-900">{percentage ? `${formatNumber(value)}%` : formatNumber(value)}</span>
+            </div>
+          );
+        }) : (
+          <div className="flex h-40 items-center justify-center text-sm text-slate-500">No chart data available</div>
         )}
       </CardContent>
     </Card>
   );
 }
 
-function FilterBar({
-  tab,
-  filters,
-  setFilters,
-}: {
-  tab: DashboardTab;
-  filters: RoleDashboardFilters;
-  setFilters: (value: RoleDashboardFilters) => void;
-}) {
-  const tt = useDbTranslation();
-
+function DonutVisual({ value }: { value: number }) {
   return (
-    <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder={tt("Fiscal year")}
-          value={filters.fiscal_year ?? ""}
-          onChange={(event) =>
-            updateFilter(setFilters, filters, "fiscal_year", event.target.value)
-          }
-        />
+    <div className="relative flex h-44 w-44 items-center justify-center rounded-full bg-slate-100">
+      <div className="absolute inset-0 rounded-full bg-[conic-gradient(#334155_var(--value),#e5e7eb_0)]" style={{ "--value": `${Math.min(Math.max(value, 0), 100)}%` } as React.CSSProperties} />
+      <div className="absolute h-28 w-28 rounded-full bg-white" />
+      <div className="relative text-center">
+        <p className="text-3xl font-bold text-slate-900">{value}%</p>
+        <p className="text-xs text-slate-500">Performance</p>
       </div>
-      {tab !== "budget" ? (
-        <>
-          <Input
-            placeholder={tt(
-              tab === "payment" ? "Payment category" : "Procurement category",
-            )}
-            value={filters.category ?? ""}
-            onChange={(event) =>
-              updateFilter(setFilters, filters, "category", event.target.value)
-            }
-          />
-          <Input
-            placeholder={tt(
-              tab === "payment" ? "Payment type" : "Procurement type",
-            )}
-            value={filters.type ?? ""}
-            onChange={(event) =>
-              updateFilter(setFilters, filters, "type", event.target.value)
-            }
-          />
-          <Select
-            value={filters.date_preset || "all"}
-            onValueChange={(value) =>
-              updateFilter(setFilters, filters, "date_preset", value)
-            }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={tt("Date")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{tt("All Dates")}</SelectItem>
-              <SelectItem value="this_week">{tt("This Week")}</SelectItem>
-              <SelectItem value="this_month">{tt("This Month")}</SelectItem>
-              <SelectItem value="custom">{tt("Custom")}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Input
-            type="date"
-            value={filters.date_from ?? ""}
-            onChange={(event) =>
-              updateFilter(setFilters, filters, "date_from", event.target.value)
-            }
-          />
-          <Input
-            type="date"
-            value={filters.date_to ?? ""}
-            onChange={(event) =>
-              updateFilter(setFilters, filters, "date_to", event.target.value)
-            }
-          />
-        </>
-      ) : (
-        <>
-          <Input
-            placeholder={tt("Office / BI code")}
-            value={filters.bi_code ?? ""}
-            onChange={(event) =>
-              updateFilter(setFilters, filters, "bi_code", event.target.value)
-            }
-          />
-          <Input
-            placeholder={tt("Department / Account code")}
-            value={filters.account_code ?? ""}
-            onChange={(event) =>
-              updateFilter(
-                setFilters,
-                filters,
-                "account_code",
-                event.target.value,
-              )
-            }
-          />
-        </>
-      )}
-      <Select
-        value={filters.status || "all"}
-        onValueChange={(value) =>
-          updateFilter(setFilters, filters, "status", value)
-        }
-      >
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder={tt("Status")} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{tt("All Status")}</SelectItem>
-          <SelectItem value="draft">{tt("Draft")}</SelectItem>
-          <SelectItem value="manager_review">{tt("Manager Review")}</SelectItem>
-          <SelectItem value="budget_tl_review">
-            {tt("Team Leader Review")}
-          </SelectItem>
-          <SelectItem value="budget_expert_processing">
-            {tt("Expert Processing")}
-          </SelectItem>
-          <SelectItem value="manager_final_review">
-            {tt("Final Approval")}
-          </SelectItem>
-          <SelectItem value="records_processing">
-            {tt("Record Office")}
-          </SelectItem>
-          <SelectItem value="sent_to_finance">
-            {tt("Sent to Finance")}
-          </SelectItem>
-          <SelectItem value="paid">{tt("Paid")}</SelectItem>
-          <SelectItem value="active">{tt("Active")}</SelectItem>
-          <SelectItem value="inactive">{tt("Inactive")}</SelectItem>
-        </SelectContent>
-      </Select>
     </div>
   );
 }
 
-function SmallSummaryCard({
-  title,
-  value,
-  description,
-}: {
-  title: string;
-  value: string | number;
-  description: string;
-}) {
-  const tt = useDbTranslation();
-
+function FilterPanel({ tab, filters, setFilters }: { tab: DashboardTab; filters: RoleDashboardFilters; setFilters: (value: RoleDashboardFilters) => void }) {
   return (
-    <div className="rounded-2xl border bg-muted/30 p-4">
-      <p className="text-xs text-muted-foreground">{tt(title)}</p>
-      <p className="mt-2 text-xl font-bold">{value}</p>
-      <p className="mt-1 text-xs text-muted-foreground">{tt(description)}</p>
-    </div>
-  );
-}
-
-function EmptyScope({ message }: { message: string }) {
-  const tt = useDbTranslation();
-
-  return (
-    <Card>
-      <CardContent className="p-6 text-sm text-muted-foreground">
-        {tt(message)}
+    <Card className="rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200">
+      <CardHeader className="border-b px-4 py-3">
+        <CardTitle className="flex items-center gap-2 text-sm font-bold text-slate-900">
+          <Filter className="h-4 w-4 text-slate-700" />
+          Report Filters
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Input className="pl-9" placeholder="Fiscal year" value={filters.fiscal_year ?? ""} onChange={(event) => filterUpdate(setFilters, filters, "fiscal_year", event.target.value)} />
+        </div>
+        <Input placeholder="Office" value={filters.office ?? ""} onChange={(event) => filterUpdate(setFilters, filters, "office", event.target.value)} />
+        <Input placeholder="Value chain" value={filters.value_chain ?? ""} onChange={(event) => filterUpdate(setFilters, filters, "value_chain", event.target.value)} />
+        <Input placeholder="Indicator" value={filters.indicator ?? ""} onChange={(event) => filterUpdate(setFilters, filters, "indicator", event.target.value)} />
+        <Select value={filters.status || "all"} onValueChange={(value) => filterUpdate(setFilters, filters, "status", value)}>
+          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="submitted">Submitted</SelectItem>
+            <SelectItem value="under_review">Under Review</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="returned">Returned</SelectItem>
+          </SelectContent>
+        </Select>
+        {tab === "achievement" ? <Input type="date" value={filters.date_from ?? ""} onChange={(event) => filterUpdate(setFilters, filters, "date_from", event.target.value)} /> : null}
       </CardContent>
     </Card>
   );
 }
 
-export default function RoleDashboard({ scope, showBudget = true }: Props) {
-  const tt = useDbTranslation();
-  const { i18n } = useTranslation();
-  const canViewBudget = showBudget && budgetVisibleScopes.has(scope);
-  const [tab, setTab] = useState<DashboardTab>(
-    canViewBudget ? "budget" : "payment",
-  );
-  const [filters, setFilters] = useState<RoleDashboardFilters>({});
-  const { data, isLoading, isFetching, refetch } = useRoleDashboard(
-    scope,
-    tab,
-    filters,
-  );
-
-  const config = roleContent[scope];
-  const dashboard = data?.data ?? {
-    payments: [],
-    procurements: [],
-    budgets: [],
-    charts: {},
-  };
-  const canViewPayment = scope !== "super_admin" || true;
-  const canViewProcurement = !paymentOnlyScopes.has(scope);
-
-  const totals = useMemo(() => {
-    const approvedPayment = dashboard.payments.reduce(
-      (sum, row) => sum + toNumber(row.approved_amount),
-      0,
-    );
-    const paidPayment = dashboard.payments.reduce(
-      (sum, row) => sum + toNumber(row.paid_amount),
-      0,
-    );
-    const procurementAmount = dashboard.procurements.reduce(
-      (sum, row) => sum + toNumber(row.amount),
-      0,
-    );
-    const adjustedBudget = dashboard.budgets.reduce(
-      (sum, row) => sum + toNumber(row.adjusted_budget),
-      0,
-    );
-    const budgetBalance = dashboard.budgets.reduce(
-      (sum, row) => sum + toNumber(row.balance_not_committed),
-      0,
-    );
-    const debit = dashboard.budgets.reduce(
-      (sum, row) => sum + toNumber(row.debit),
-      0,
-    );
-    const paymentPending = dashboard.payments.filter((row) =>
-      isPendingStatus(row.status),
-    ).length;
-    const procurementPending = dashboard.procurements.filter((row) =>
-      isPendingStatus(row.status),
-    ).length;
-    const approvedPayments = dashboard.payments.filter((row) =>
-      isApprovedStatus(row.status),
-    ).length;
-    const approvedProcurements = dashboard.procurements.filter((row) =>
-      isApprovedStatus(row.status),
-    ).length;
-    const returnedPayments = dashboard.payments.filter((row) =>
-      isReturnedStatus(row.status),
-    ).length;
-    const returnedProcurements = dashboard.procurements.filter((row) =>
-      isReturnedStatus(row.status),
-    ).length;
-    const sentToFinance = dashboard.payments.filter(
-      (row) =>
-        normalize(row.status).includes("sent_to_finance") ||
-        normalize(row.status).includes("finance"),
-    ).length;
-    const paidPayments = dashboard.payments.filter(
-      (row) =>
-        normalize(row.status).includes("paid") || toNumber(row.paid_amount) > 0,
-    ).length;
-    const completedRecords =
-      dashboard.payments.filter(
-        (row) =>
-          normalize(row.status).includes("completed") ||
-          normalize(row.status).includes("paid"),
-      ).length +
-      dashboard.procurements.filter((row) =>
-        normalize(row.status).includes("completed"),
-      ).length;
-    const budgetUtilization =
-      adjustedBudget > 0 ? Math.round((debit / adjustedBudget) * 100) : 0;
-
-    return {
-      approvedPayment,
-      paidPayment,
-      procurementAmount,
-      adjustedBudget,
-      budgetBalance,
-      debit,
-      paymentPending,
-      procurementPending,
-      approvedPayments,
-      approvedProcurements,
-      returnedRequests: returnedPayments + returnedProcurements,
-      sentToFinance,
-      paidPayments,
-      completedRecords,
-      paymentCount: dashboard.payments.length,
-      procurementCount: dashboard.procurements.length,
-      budgetCount: dashboard.budgets.length,
-      budgetUtilization,
-      openWorkload: paymentPending + procurementPending,
-    };
-  }, [dashboard]);
-
-  const kpis = useMemo<KpiDefinition[]>(() => {
-    const budgetCard: KpiDefinition = {
-      title: "Budget Balance",
-      value: compactMoney(totals.budgetBalance),
-      description: `${totals.budgetUtilization}% budget utilized`,
-      icon: WalletCards,
-      href: "/dashboard/budgets",
-    };
-
-    const byRole: Record<RoleDashboardScope, KpiDefinition[]> = {
-      super_admin: [
-        {
-          title: "Total Users",
-          value: "-",
-          description: "User count is loaded from user management",
-          icon: Users,
-          href: "/dashboard/users",
-        },
-        {
-          title: "Total Offices",
-          value: "-",
-          description: "Office count is loaded from offices",
-          icon: Building2,
-          href: "/dashboard/offices",
-        },
-        {
-          title: "Total Departments",
-          value: "-",
-          description: "Department count is loaded from departments",
-          icon: Landmark,
-          href: "/dashboard/departments",
-        },
-        {
-          title: "Total Payments",
-          value: totals.paymentCount,
-          description: compactMoney(totals.approvedPayment),
-          icon: Banknote,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "Total Procurements",
-          value: totals.procurementCount,
-          description: compactMoney(totals.procurementAmount),
-          icon: PackageCheck,
-          href: "/dashboard/procurement",
-        },
-        {
-          title: "Pending Workflow Actions",
-          value: totals.openWorkload,
-          description: `${totals.paymentPending} payment, ${totals.procurementPending} procurement`,
-          icon: Clock3,
-          href: "/dashboard/notifications",
-        },
-      ],
-      manager: [
-        {
-          title: "Payments Pending Approval",
-          value: totals.paymentPending,
-          description: "Payments waiting for manager action",
-          icon: Clock3,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "Procurements Pending Approval",
-          value: totals.procurementPending,
-          description: "Procurements waiting for manager action",
-          icon: BriefcaseBusiness,
-          href: "/dashboard/procurement",
-        },
-        {
-          title: "Approved Payments",
-          value: totals.approvedPayments,
-          description: compactMoney(totals.approvedPayment),
-          icon: CheckCircle2,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "Approved Procurements",
-          value: totals.approvedProcurements,
-          description: compactMoney(totals.procurementAmount),
-          icon: FileCheck2,
-          href: "/dashboard/procurement",
-        },
-        budgetCard,
-        {
-          title: "Open Workload",
-          value: totals.openWorkload,
-          description: "Pending workflow actions",
-          icon: Activity,
-          href: "/dashboard/notifications",
-        },
-      ],
-      head_of_development_branch: [
-        {
-          title: "Pending Payments",
-          value: totals.paymentPending,
-          description: "Payments awaiting review",
-          icon: Clock3,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "Pending Procurements",
-          value: totals.procurementPending,
-          description: "Procurements awaiting review",
-          icon: BriefcaseBusiness,
-          href: "/dashboard/procurement",
-        },
-        {
-          title: "Approved This Month",
-          value: totals.approvedPayments + totals.approvedProcurements,
-          description: "Approved requests in current scope",
-          icon: CheckCircle2,
-        },
-        {
-          title: "Returned Requests",
-          value: totals.returnedRequests,
-          description: "Returned or rejected requests",
-          icon: FileText,
-        },
-        budgetCard,
-      ],
-      head_of_service_branch: [
-        {
-          title: "Pending Payments",
-          value: totals.paymentPending,
-          description: "Payments awaiting review",
-          icon: Clock3,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "Pending Procurements",
-          value: totals.procurementPending,
-          description: "Procurements awaiting review",
-          icon: BriefcaseBusiness,
-          href: "/dashboard/procurement",
-        },
-        {
-          title: "Approved This Month",
-          value: totals.approvedPayments + totals.approvedProcurements,
-          description: "Approved requests in current scope",
-          icon: CheckCircle2,
-        },
-        {
-          title: "Returned Requests",
-          value: totals.returnedRequests,
-          description: "Returned or rejected requests",
-          icon: FileText,
-        },
-        budgetCard,
-      ],
-      team_leader: [
-        {
-          title: "Pending Budget Reviews",
-          value: totals.paymentPending + totals.procurementPending,
-          description: "Requests waiting for budget/team review",
-          icon: WalletCards,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "Pending Expert Assignments",
-          value: totals.openWorkload,
-          description: "Open assignment queue",
-          icon: Users,
-        },
-        {
-          title: "Approved Requests",
-          value: totals.approvedPayments + totals.approvedProcurements,
-          description: "Approved by team flow",
-          icon: CheckCircle2,
-        },
-        {
-          title: "Open Workload",
-          value: totals.openWorkload,
-          description: "Pending payment and procurement",
-          icon: Activity,
-        },
-        ...(canViewBudget ? [budgetCard] : []),
-      ],
-      expert: [
-        {
-          title: "Assigned Payments",
-          value: totals.paymentCount,
-          description: `${totals.paymentPending} pending payment reviews`,
-          icon: Banknote,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "Assigned Procurements",
-          value: totals.procurementCount,
-          description: `${totals.procurementPending} pending procurement reviews`,
-          icon: PackageCheck,
-          href: "/dashboard/procurement",
-        },
-        {
-          title: "Completed Reviews",
-          value: totals.approvedPayments + totals.approvedProcurements,
-          description: "Completed or approved reviews",
-          icon: CheckCircle2,
-        },
-        {
-          title: "Pending Reviews",
-          value: totals.openWorkload,
-          description: "Assigned pending reviews",
-          icon: Clock3,
-        },
-        ...(canViewBudget ? [budgetCard] : []),
-      ],
-      record_officer: [
-        {
-          title: "Pending Record Processing",
-          value: totals.openWorkload,
-          description: "Ready for record office processing",
-          icon: FileText,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "Pending Exit",
-          value: totals.paymentPending,
-          description: "Payments needing exit processing",
-          icon: Printer,
-        },
-        {
-          title: "Sent To Finance",
-          value: totals.sentToFinance,
-          description: "Payments sent to finance",
-          icon: Send,
-        },
-        {
-          title: "Completed Records",
-          value: totals.completedRecords,
-          description: "Completed payment/procurement records",
-          icon: CheckCircle2,
-        },
-      ],
-      accountant: [
-        {
-          title: "Pending Finance Payments",
-          value: totals.paymentPending,
-          description: "Payments waiting for finance action",
-          icon: Clock3,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "Paid Payments",
-          value: totals.paidPayments,
-          description: "Payments marked as paid",
-          icon: CheckCircle2,
-        },
-        {
-          title: "Total Paid Amount",
-          value: compactMoney(totals.paidPayment),
-          description: "Total paid in current scope",
-          icon: Banknote,
-        },
-        {
-          title: "Monthly Paid Amount",
-          value: compactMoney(totals.paidPayment),
-          description: "Filtered monthly paid amount",
-          icon: TrendingUp,
-        },
-      ],
-      secretory: [
-        {
-          title: "My Payment Requests",
-          value: totals.paymentCount,
-          description: "Payment requests created/handled by you",
-          icon: Banknote,
-          href: "/dashboard/payment",
-        },
-        {
-          title: "My Procurement Requests",
-          value: totals.procurementCount,
-          description: "Procurement requests created/handled by you",
-          icon: PackageCheck,
-          href: "/dashboard/procurement",
-        },
-        {
-          title: "Pending Requests",
-          value: totals.openWorkload,
-          description: "Pending own requests",
-          icon: Clock3,
-        },
-        {
-          title: "Approved Requests",
-          value: totals.approvedPayments + totals.approvedProcurements,
-          description: "Approved own requests",
-          icon: CheckCircle2,
-        },
-        {
-          title: "Rejected Requests",
-          value: totals.returnedRequests,
-          description: "Returned or rejected own requests",
-          icon: FileText,
-        },
-      ],
-    };
-
-    return byRole[scope];
-  }, [scope, totals, canViewBudget]);
-
-  if (isLoading) {
-    return (
-      <div className="flex min-h-[420px] items-center justify-center rounded-3xl border bg-card">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        {tt("Loading dashboard...")}
+function TablePagination({ page, totalPages, totalRows, start, end, onPageChange }: { page: number; totalPages: number; totalRows: number; start: number; end: number; onPageChange: (page: number) => void }) {
+  return (
+    <div className="flex flex-col gap-3 border-t bg-white px-4 py-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+      <span>{start}-{end} of {totalRows}</span>
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Previous</Button>
+        <span className="text-xs font-medium">Page {page} / {totalPages}</span>
+        <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>Next</Button>
       </div>
+    </div>
+  );
+}
+
+function DataTable({ tab, plans, achievements, reports }: { tab: DashboardTab; plans: DashboardPlanRow[]; achievements: DashboardAchievementRow[]; reports: DashboardReportRow[] }) {
+  const [page, setPage] = useState(1);
+
+  if (tab === "plan") {
+    const pagination = getPageRows(plans, page);
+    return (
+      <Card className="overflow-hidden rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200">
+        <CardHeader className="border-b px-4 py-3"><CardTitle className="text-sm font-bold">Plan Records</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table className="min-w-[980px]">
+              <TableHeader><TableRow className="bg-slate-50"><TableHead>Plan No</TableHead><TableHead>Office</TableHead><TableHead>Directorate</TableHead><TableHead>Value Chain</TableHead><TableHead>Indicator</TableHead><TableHead className="text-right">Annual Target</TableHead><TableHead>Fiscal Year</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+              <TableBody>{pagination.rows.length ? pagination.rows.map((row) => <TableRow key={row.id}><TableCell className="font-medium">{row.plan_no ?? `PLN-${row.id}`}</TableCell><TableCell>{row.office ?? "-"}</TableCell><TableCell>{row.directorate ?? "-"}</TableCell><TableCell>{row.value_chain ?? "-"}</TableCell><TableCell>{row.indicator ?? "-"}</TableCell><TableCell className="text-right font-semibold">{formatNumber(row.annual_target)}</TableCell><TableCell>{row.fiscal_year ?? "-"}</TableCell><TableCell><Badge variant="outline" className={`capitalize ${statusTone(row.status)}`}>{statusLabel(row.status)}</Badge></TableCell><TableCell className="text-right"><Button asChild size="sm" variant="ghost"><Link href={`/dashboard/plans/${row.id}`}><Eye className="mr-2 h-4 w-4" />Detail</Link></Button></TableCell></TableRow>) : <TableRow><TableCell colSpan={9} className="h-32 text-center text-slate-500">No plan records found.</TableCell></TableRow>}</TableBody>
+            </Table>
+          </div>
+          <TablePagination page={pagination.page} totalPages={pagination.totalPages} totalRows={plans.length} start={pagination.start} end={pagination.end} onPageChange={setPage} />
+        </CardContent>
+      </Card>
     );
   }
 
-  return (
-    <div key={i18n.language} className="w-full max-w-full min-w-0 space-y-4 overflow-hidden px-3 pb-6 sm:px-4 lg:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-2">
-          <span>{tt("Dashboards")}</span>
-          <span>/</span>
-          <span className="font-semibold text-foreground">
-            {tt(config.badge)}
-          </span>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => refetch()}
-          disabled={isFetching}
-        >
-          {isFetching ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCcw className="mr-2 h-4 w-4" />
-          )}
-          {tt("Refresh")}
-        </Button>
-      </div>
+  if (tab === "achievement") {
+    const pagination = getPageRows(achievements, page);
+    return (
+      <Card className="overflow-hidden rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200">
+        <CardHeader className="border-b px-4 py-3"><CardTitle className="text-sm font-bold">Achievement Records</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table className="min-w-[980px]">
+              <TableHeader><TableRow className="bg-slate-50"><TableHead>Achievement No</TableHead><TableHead>Office</TableHead><TableHead>Value Chain</TableHead><TableHead>Indicator</TableHead><TableHead className="text-right">Target</TableHead><TableHead className="text-right">Achieved</TableHead><TableHead className="text-right">%</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+              <TableBody>{pagination.rows.length ? pagination.rows.map((row) => <TableRow key={row.id}><TableCell className="font-medium">{row.achievement_no ?? `ACH-${row.id}`}</TableCell><TableCell>{row.office ?? "-"}</TableCell><TableCell>{row.value_chain ?? "-"}</TableCell><TableCell>{row.indicator ?? "-"}</TableCell><TableCell className="text-right font-semibold">{formatNumber(row.target)}</TableCell><TableCell className="text-right font-semibold">{formatNumber(row.achieved)}</TableCell><TableCell className="text-right font-bold text-slate-900">{formatNumber(row.achievement_percent)}%</TableCell><TableCell><Badge variant="outline" className={`capitalize ${statusTone(row.status)}`}>{statusLabel(row.status)}</Badge></TableCell><TableCell className="text-right"><Button asChild size="sm" variant="ghost"><Link href={`/dashboard/achievements/${row.id}`}><Eye className="mr-2 h-4 w-4" />Detail</Link></Button></TableCell></TableRow>) : <TableRow><TableCell colSpan={9} className="h-32 text-center text-slate-500">No achievement records found.</TableCell></TableRow>}</TableBody>
+            </Table>
+          </div>
+          <TablePagination page={pagination.page} totalPages={pagination.totalPages} totalRows={achievements.length} start={pagination.start} end={pagination.end} onPageChange={setPage} />
+        </CardContent>
+      </Card>
+    );
+  }
 
-      <section className="overflow-hidden rounded-xl border border-slate-900/20 bg-slate-950 text-white shadow-sm">
-        <div className="relative isolate px-5 py-5 md:px-7">
-          <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.12)_1px,transparent_0)] [background-size:18px_18px]" />
-          <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge className="border-white/20 bg-white/10 text-white hover:bg-white/10">
-                  {tt(config.badge)}
-                </Badge>
-                <span className="text-xs text-slate-300">
-                  {tt("Fiscal year")} {filters.fiscal_year || tt("All")}
-                </span>
-              </div>
-              <div>
-                <h1 className="break-words text-xl font-bold tracking-tight sm:text-2xl md:text-3xl">
-                  {tt(config.title)}
-                </h1>
-                <p className="mt-1 max-w-3xl break-words text-sm text-slate-300">
-                  {totals.openWorkload} pending workflow action
-                  {totals.openWorkload === 1 ? "" : "s"},{" "}
-                  {totals.approvedPayments + totals.approvedProcurements}{" "}
-                  approved request
-                  {totals.approvedPayments + totals.approvedProcurements === 1
-                    ? ""
-                    : "s"}
-                  , and{" "}
-                  {canViewBudget
-                    ? `${totals.budgetUtilization}% budget utilization`
-                    : "role-based operational visibility"}
-                  .
-                </p>
-              </div>
+  const pagination = getPageRows(reports, page);
+  return (
+    <Card className="overflow-hidden rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200">
+      <CardHeader className="border-b px-4 py-3"><CardTitle className="text-sm font-bold">Performance Reports</CardTitle></CardHeader>
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <Table className="min-w-[980px]">
+            <TableHeader><TableRow className="bg-slate-50"><TableHead>Office</TableHead><TableHead>Report Type</TableHead><TableHead>Value Chain</TableHead><TableHead>Period</TableHead><TableHead className="text-right">Target</TableHead><TableHead className="text-right">Achieved</TableHead><TableHead className="text-right">Performance</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
+            <TableBody>{pagination.rows.length ? pagination.rows.map((row) => <TableRow key={row.id}><TableCell>{row.office ?? "-"}</TableCell><TableCell className="font-medium">{row.report_type ?? "-"}</TableCell><TableCell>{row.value_chain ?? "-"}</TableCell><TableCell>{row.period ?? "-"}</TableCell><TableCell className="text-right font-semibold">{formatNumber(row.total_target)}</TableCell><TableCell className="text-right font-semibold">{formatNumber(row.total_achieved)}</TableCell><TableCell className="text-right font-bold text-slate-900">{formatNumber(row.performance_percent)}%</TableCell><TableCell><Badge variant="outline" className={`capitalize ${statusTone(row.status)}`}>{statusLabel(row.status)}</Badge></TableCell><TableCell className="text-right"><Button asChild size="sm" variant="ghost"><Link href={`/dashboard/reports/${row.id}`}><Eye className="mr-2 h-4 w-4" />Detail</Link></Button></TableCell></TableRow>) : <TableRow><TableCell colSpan={9} className="h-32 text-center text-slate-500">No report records found.</TableCell></TableRow>}</TableBody>
+          </Table>
+        </div>
+        <TablePagination page={pagination.page} totalPages={pagination.totalPages} totalRows={reports.length} start={pagination.start} end={pagination.end} onPageChange={setPage} />
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function RoleDashboard({ scope }: Props) {
+  const [tab, setTab] = useState<DashboardTab>("plan");
+  const [filters, setFilters] = useState<RoleDashboardFilters>({});
+  const { data, isLoading, isFetching, refetch } = useRoleDashboard(scope, tab, filters);
+  const dashboard = data?.data ?? { plans: [], achievements: [], reports: [], charts: {} };
+  const config = roleConfig[scope] ?? genericRoleConfig.super_admin;
+
+  const totals = useMemo(() => {
+    const totalTarget = dashboard.plans.reduce((sum, row) => sum + toNumber(row.annual_target), 0);
+    const totalAchieved = dashboard.achievements.reduce((sum, row) => sum + toNumber(row.achieved), 0);
+    const approvedPlans = dashboard.plans.filter((row) => normalize(row.status).includes("approved")).length;
+    const pending = [...dashboard.plans, ...dashboard.achievements].filter((row) => normalize(row.status).includes("submitted") || normalize(row.status).includes("review")).length;
+    const performance = totalTarget > 0 ? Math.min(100, Math.round((totalAchieved / totalTarget) * 100)) : 0;
+    return { totalTarget, totalAchieved, performance, approvedPlans, pending, planCount: dashboard.plans.length, achievementCount: dashboard.achievements.length, reportCount: dashboard.reports.length };
+  }, [dashboard]);
+
+  const kpis: KpiItem[] = [
+    { title: "Total Plans", value: totals.planCount, subtitle: `${formatCompact(totals.totalTarget)} planned target`, icon: ClipboardList },
+    { title: "Achievements", value: totals.achievementCount, subtitle: `${formatCompact(totals.totalAchieved)} achieved result`, icon: FileCheck2 },
+    { title: "Performance", value: `${totals.performance}%`, subtitle: "achievement against plan", icon: TrendingUp },
+    { title: config.canApprove ? "Pending Review" : "Approved Plans", value: config.canApprove ? totals.pending : totals.approvedPlans, subtitle: config.canApprove ? "waiting for action" : "completed approvals", icon: config.canApprove ? Activity : CheckCircle2 },
+  ];
+
+  if (isLoading) {
+    return <div className="flex min-h-[420px] items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200"><Loader2 className="mr-2 h-5 w-5 animate-spin" />Loading dashboard...</div>;
+  }
+
+  return (
+    <div className="min-w-0 space-y-4 bg-slate-100 p-3 sm:p-4 lg:p-5">
+      <section className="overflow-hidden rounded-xl border bg-white text-slate-900 shadow-sm">
+        <div className="grid gap-0 lg:grid-cols-[1.4fr_0.6fr]">
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="bg-slate-100 text-slate-900 hover:bg-slate-100">Plan & Achievement</Badge>
+              <Badge variant="outline" className="border-slate-200 text-slate-900"><Building2 className="mr-1 h-3.5 w-3.5" />{config.office}</Badge>
+              <Badge variant="outline" className="border-slate-200 text-slate-900"><Users className="mr-1 h-3.5 w-3.5" />{config.role}</Badge>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {scope === "secretory" ? (
-                <Button
-                  asChild
-                  size="sm"
-                  className="bg-white text-slate-950 hover:bg-slate-100"
-                >
-                  <Link href="/dashboard/payment/create">
-                    <Plus className="mr-2 h-4 w-4" />
-                    {tt("Create Payment")}
-                  </Link>
-                </Button>
-              ) : null}
-              {scope === "secretory" ? (
-                <Button asChild size="sm" variant="secondary">
-                  <Link href="/dashboard/procurement/create">
-                    <Plus className="mr-2 h-4 w-4" />
-                    {tt("Create Procurement")}
-                  </Link>
-                </Button>
-              ) : null}
-              {scope === "record_officer" ? (
-                <Button
-                  asChild
-                  size="sm"
-                  className="bg-white text-slate-950 hover:bg-slate-100"
-                >
-                  <Link href="/dashboard/payment">
-                    <Printer className="mr-2 h-4 w-4" />
-                    {tt("Process Records")}
-                  </Link>
-                </Button>
-              ) : null}
-              {scope === "accountant" ? (
-                <Button
-                  asChild
-                  size="sm"
-                  className="bg-white text-slate-950 hover:bg-slate-100"
-                >
-                  <Link href="/dashboard/payment">
-                    <Banknote className="mr-2 h-4 w-4" />
-                    {tt("Finance Queue")}
-                  </Link>
-                </Button>
-              ) : null}
+            <h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{config.title}</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">{config.access}</p>
+            <div className="mt-5 flex flex-wrap gap-2 text-xs text-slate-500">
+              <span className="rounded-full bg-slate-50 px-3 py-1">Plans</span>
+              <span className="rounded-full bg-slate-50 px-3 py-1">Achievements</span>
+              <span className="rounded-full bg-slate-50 px-3 py-1">Performance Reports</span>
+              <span className="rounded-full bg-slate-50 px-3 py-1">Audit-ready Monitoring</span>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 bg-slate-50 p-5 sm:p-6 lg:border-l lg:border-t-0">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Overall Score</p>
+                <p className="mt-2 text-5xl font-bold text-slate-900">{totals.performance}%</p>
+              </div>
+              <Gauge className="h-12 w-12 text-slate-900" />
+            </div>
+            <Progress value={totals.performance} className="mt-5 h-2 bg-slate-100" />
+            <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-lg bg-slate-50 p-3"><p className="text-slate-500">Target</p><p className="text-lg font-bold">{formatCompact(totals.totalTarget)}</p></div>
+              <div className="rounded-lg bg-slate-50 p-3"><p className="text-slate-500">Achieved</p><p className="text-lg font-bold">{formatCompact(totals.totalAchieved)}</p></div>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.slice(0, 4).map((kpi) => (
-          <KpiCard key={kpi.title} {...kpi} />
-        ))}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{kpis.map((kpi) => <KpiCard key={kpi.title} {...kpi} />)}</div>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_1fr_0.75fr]">
+        <PowerBiBarChart title="Achievement by Value Chain" rows={dashboard.charts.achievement_by_value_chain ?? dashboard.charts.byAchievement} />
+        <PowerBiBarChart title="Performance by Office" rows={dashboard.charts.performance_by_office ?? dashboard.charts.byOffice} percentage />
+        <Card className="rounded-xl border-0 bg-white shadow-sm ring-1 ring-slate-200">
+          <CardHeader className="border-b px-4 py-3"><CardTitle className="text-sm font-bold">Performance Gauge</CardTitle></CardHeader>
+          <CardContent className="flex flex-col items-center gap-4 p-5">
+            <DonutVisual value={totals.performance} />
+            <div className="grid w-full grid-cols-2 gap-3 text-sm">
+              <div className="rounded-lg border p-3"><p className="text-slate-500">Submit</p><p className="font-bold">{config.canSubmit ? "Allowed" : "View only"}</p></div>
+              <div className="rounded-lg border p-3"><p className="text-slate-500">Approve</p><p className="font-bold">{config.canApprove ? "Allowed" : "No"}</p></div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-        <BarChartCard
-          title={
-            scope === "accountant"
-              ? "Monthly Payment Trend"
-              : scope === "super_admin"
-                ? "Monthly Transactions"
-                : "Approval Volume"
-          }
-          rows={
-            dashboard.charts.payment_by_category?.length
-              ? dashboard.charts.payment_by_category
-              : dashboard.charts.payment_status_summary
-          }
-          amount
-        />
-        <DonutChart
-          title={
-            scope === "accountant"
-              ? "Paid By Payment Type"
-              : scope === "super_admin"
-                ? "Status Distribution"
-                : "Status Distribution"
-          }
-          rows={
-            dashboard.charts.payment_status_summary?.length
-              ? dashboard.charts.payment_status_summary
-              : dashboard.charts.procurement_status_summary
-          }
-        />
-      </div>
-
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-        <Tabs
-          value={tab}
-          onValueChange={(value) => setTab(value as DashboardTab)}
-          className="min-w-0 space-y-3"
-        >
-          <div className="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <TabsList className="h-auto w-full flex-wrap justify-start rounded-lg bg-muted p-1 sm:w-auto">
-              {canViewBudget ? (
-                <TabsTrigger
-                  value="budget"
-                  className="h-8 flex-1 px-3 sm:flex-none"
-                >
-                  {tt("Budget")}
-                </TabsTrigger>
-              ) : null}
-              <TabsTrigger
-                value="payment"
-                className="h-8 flex-1 px-3 sm:flex-none"
-              >
-                {tt("Payment")}
-              </TabsTrigger>
-              {canViewProcurement ? (
-                <TabsTrigger
-                  value="procurement"
-                  className="h-8 flex-1 px-3 sm:flex-none"
-                >
-                  {tt("Procurement")}
-                </TabsTrigger>
-              ) : null}
-            </TabsList>
-            <Badge variant="secondary">
-              {isFetching ? tt("Updating...") : tt("Live data")}
-            </Badge>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as DashboardTab)} className="space-y-4">
+        <div className="flex flex-col gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200 lg:flex-row lg:items-center lg:justify-between">
+          <TabsList className="h-auto w-full justify-start rounded-lg bg-slate-100 p-1 lg:w-auto">
+            <TabsTrigger value="plan" className="gap-2"><ClipboardList className="h-4 w-4" />Plans</TabsTrigger>
+            <TabsTrigger value="achievement" className="gap-2"><FileCheck2 className="h-4 w-4" />Achievements</TabsTrigger>
+            <TabsTrigger value="report" className="gap-2"><BarChart3 className="h-4 w-4" />Reports</TabsTrigger>
+          </TabsList>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="gap-1"><CalendarDays className="h-3.5 w-3.5" />Current View</Badge>
+            <Button type="button" size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>{isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}Refresh</Button>
           </div>
-
-          <FilterBar tab={tab} filters={filters} setFilters={setFilters} />
-
-          <TabsContent value="payment" className="space-y-3">
-            {!canViewPayment ? (
-              <EmptyScope message="This role has no payment dashboard scope." />
-            ) : (
-              <PaymentTable
-                title={config.paymentTableTitle}
-                scope={scope}
-                payments={dashboard.payments}
-              />
-            )}
-          </TabsContent>
-
-          <TabsContent value="procurement" className="space-y-3">
-            {!canViewProcurement ? (
-              <EmptyScope message="This role has no procurement dashboard scope." />
-            ) : (
-              <ProcurementTable
-                title={config.procurementTableTitle}
-                procurements={dashboard.procurements}
-              />
-            )}
-          </TabsContent>
-
-          {canViewBudget ? (
-            <TabsContent value="budget" className="space-y-3">
-              <BudgetTable budgets={dashboard.budgets} />
-            </TabsContent>
-          ) : null}
-        </Tabs>
-
-        <div className="min-w-0 space-y-4">
-          <Card className="min-w-0 rounded-xl border bg-card shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center justify-between text-sm font-semibold">
-                <span className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-primary" />
-                  {tt("Workload Summary")}
-                </span>
-                <Badge variant="outline">
-                  {totals.openWorkload} {tt("open")}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">
-                  {tt("Pending payments")}
-                </span>
-                <span className="font-semibold">{totals.paymentPending}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">
-                  {tt("Pending procurements")}
-                </span>
-                <span className="font-semibold">
-                  {totals.procurementPending}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">
-                  {tt("Approved requests")}
-                </span>
-                <span className="font-semibold">
-                  {totals.approvedPayments + totals.approvedProcurements}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">
-                  {tt("Returned requests")}
-                </span>
-                <span className="font-semibold">{totals.returnedRequests}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {canViewBudget ? (
-            <Card className="min-w-0 rounded-xl border bg-card shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <WalletCards className="h-4 w-4 text-primary" />
-                  {tt("Budget Utilization")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      {tt("Adjusted budget")}
-                    </span>
-                    <span className="font-semibold">
-                      {compactMoney(totals.adjustedBudget)}
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted">
-                    <div
-                      className="h-2 rounded-full bg-primary"
-                      style={{
-                        width: `${Math.min(100, Math.max(2, totals.budgetUtilization))}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">{tt("Balance")}</span>
-                  <span className="font-semibold">
-                    {compactMoney(totals.budgetBalance)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">{tt("Debit")}</span>
-                  <span className="font-semibold">
-                    {compactMoney(totals.debit)}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          <BarChartCard
-            title={canViewProcurement ? "Procurement Status" : "Payment Status"}
-            rows={
-              canViewProcurement
-                ? dashboard.charts.procurement_status_summary
-                : dashboard.charts.payment_status_summary
-            }
-          />
         </div>
+
+        <FilterPanel tab={tab} filters={filters} setFilters={setFilters} />
+
+        <TabsContent value="plan" className="mt-0 space-y-4">
+          <DataTable tab="plan" plans={dashboard.plans} achievements={dashboard.achievements} reports={dashboard.reports} />
+        </TabsContent>
+        <TabsContent value="achievement" className="mt-0 space-y-4">
+          <DataTable tab="achievement" plans={dashboard.plans} achievements={dashboard.achievements} reports={dashboard.reports} />
+        </TabsContent>
+        <TabsContent value="report" className="mt-0 space-y-4">
+          <DataTable tab="report" plans={dashboard.plans} achievements={dashboard.achievements} reports={dashboard.reports} />
+        </TabsContent>
+      </Tabs>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <PowerBiBarChart title="Plan Status Summary" rows={dashboard.charts.plan_status_summary ?? dashboard.charts.byStatus} />
+        <PowerBiBarChart title="Achievement Status Summary" rows={dashboard.charts.achievement_status_summary} />
       </div>
     </div>
-  );
-}
-const TABLE_PAGE_SIZE = 5;
-
-function getPageRows<T>(rows: T[], page: number) {
-  const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
-  const safePage = Math.min(Math.max(page, 1), totalPages);
-  const start = (safePage - 1) * TABLE_PAGE_SIZE;
-
-  return {
-    page: safePage,
-    totalPages,
-    rows: rows.slice(start, start + TABLE_PAGE_SIZE),
-    start: rows.length ? start + 1 : 0,
-    end: Math.min(start + TABLE_PAGE_SIZE, rows.length),
-  };
-}
-
-function TablePagination({
-  page,
-  totalPages,
-  totalRows,
-  start,
-  end,
-  onPageChange,
-}: {
-  page: number;
-  totalPages: number;
-  totalRows: number;
-  start: number;
-  end: number;
-  onPageChange: (page: number) => void;
-}) {
-  const tt = useDbTranslation();
-
-  if (totalRows <= TABLE_PAGE_SIZE) return null;
-
-  return (
-    <div className="flex flex-col gap-3 border-t bg-muted/20 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-muted-foreground">
-        {tt("Showing")} {start}-{end} {tt("of")} {totalRows}
-      </p>
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => onPageChange(page - 1)}
-          disabled={page <= 1}
-        >
-          {tt("Previous")}
-        </Button>
-        <span className="min-w-[4rem] text-center text-xs font-medium text-muted-foreground">
-          {page} / {totalPages}
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages}
-        >
-          {tt("Next")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function PaymentTable({
-  title,
-  scope,
-  payments,
-}: {
-  title: string;
-  scope: RoleDashboardScope;
-  payments: any[];
-}) {
-  const tt = useDbTranslation();
-  const [page, setPage] = useState(1);
-  const pagination = getPageRows(payments, page);
-
-  return (
-    <Card className="min-w-0 overflow-hidden rounded-2xl border bg-card shadow-sm">
-      <CardHeader className="border-b bg-muted/30 pb-4">
-        <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
-          <span>{tt(title)}</span>
-          {scope === "accountant" ? (
-            <Badge variant="secondary">
-              {tt("Action")}: {tt("Mark As Paid")}
-            </Badge>
-          ) : null}
-          {scope === "record_officer" ? (
-            <Badge variant="secondary">
-              {tt("Actions")}: {tt("Print Remaining")} / {tt("Print Exit")} /{" "}
-              {tt("Send To Finance")}
-            </Badge>
-          ) : null}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="w-full overflow-x-auto">
-          <Table className="min-w-[920px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead>{tt("Payment No")}</TableHead>
-                <TableHead>{tt("Category")}</TableHead>
-                <TableHead>{tt("Payment Type")}</TableHead>
-                <TableHead className="text-right">
-                  {tt("Approved Amount")}
-                </TableHead>
-                <TableHead className="text-right">
-                  {tt("Paid Amount")}
-                </TableHead>
-                <TableHead>{tt("Status")}</TableHead>
-                <TableHead>{tt("Budget Code")}</TableHead>
-                <TableHead>{tt("Approved Date")}</TableHead>
-                <TableHead className="text-right">{tt("Actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {payments.length ? (
-                pagination.rows.map((row) => (
-                  <TableRow key={row.id} className="hover:bg-muted/40">
-                    <TableCell className="font-medium">
-                      {row.payment_no ?? "-"}
-                    </TableCell>
-                    <TableCell>{row.category ?? "-"}</TableCell>
-                    <TableCell>{row.type ?? "-"}</TableCell>
-                    <TableCell className="text-right">
-                      {money(row.approved_amount)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {money(row.paid_amount)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`capitalize ${statusTone(row.status)}`}
-                      >
-                        {tt(statusLabel(row.status))}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{row.allocated_budget_code ?? "-"}</TableCell>
-                    <TableCell>{date(row.approved_date)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/dashboard/payment/${row.id}`}>
-                            <Eye className="h-4 w-4 sm:mr-2" />
-                            <span className="hidden sm:inline">
-                              {tt("Detail")}
-                            </span>
-                          </Link>
-                        </Button>
-                        {scope === "record_officer" ? (
-                          <Button asChild size="sm" variant="outline">
-                            <Link href={`/dashboard/payment/${row.id}/print`}>
-                              <Printer className="h-4 w-4 sm:mr-2" />
-                              <span className="hidden sm:inline">
-                                {tt("Print")}
-                              </span>
-                            </Link>
-                          </Button>
-                        ) : null}
-                        {scope === "accountant" ? (
-                          <Button asChild size="sm">
-                            <Link href={`/dashboard/payment/${row.id}`}>
-                              {tt("Mark Paid")}
-                            </Link>
-                          </Button>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={9}
-                    className="h-28 text-center text-muted-foreground"
-                  >
-                    {tt("No payment records found for this role and filter.")}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-        <TablePagination
-          page={pagination.page}
-          totalPages={pagination.totalPages}
-          totalRows={payments.length}
-          start={pagination.start}
-          end={pagination.end}
-          onPageChange={setPage}
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
-function ProcurementTable({
-  title,
-  procurements,
-}: {
-  title: string;
-  procurements: any[];
-}) {
-  const tt = useDbTranslation();
-  const [page, setPage] = useState(1);
-  const pagination = getPageRows(procurements, page);
-
-  return (
-    <Card className="min-w-0 overflow-hidden rounded-2xl border bg-card shadow-sm">
-      <CardHeader className="border-b bg-muted/30 pb-4">
-        <CardTitle className="text-base">{tt(title)}</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="w-full overflow-x-auto">
-          <Table className="min-w-[920px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead>{tt("Procurement No")}</TableHead>
-                <TableHead>{tt("Customer Name")}</TableHead>
-                <TableHead>{tt("Category")}</TableHead>
-                <TableHead>{tt("Type")}</TableHead>
-                <TableHead>{tt("Budget Code")}</TableHead>
-                <TableHead className="text-right">{tt("Amount")}</TableHead>
-                <TableHead>{tt("Status")}</TableHead>
-                <TableHead>{tt("Approved Date")}</TableHead>
-                <TableHead className="text-right">{tt("Actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {procurements.length ? (
-                pagination.rows.map((row) => (
-                  <TableRow key={row.id} className="hover:bg-muted/40">
-                    <TableCell className="font-medium">
-                      {row.procurement_no ?? "-"}
-                    </TableCell>
-                    <TableCell>{row.customer_name ?? "-"}</TableCell>
-                    <TableCell>{row.category ?? "-"}</TableCell>
-                    <TableCell>{row.type ?? "-"}</TableCell>
-                    <TableCell>{row.budget_code ?? "-"}</TableCell>
-                    <TableCell className="text-right">
-                      {money(row.amount)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`capitalize ${statusTone(row.status)}`}
-                      >
-                        {tt(statusLabel(row.status))}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{date(row.approved_date)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/dashboard/procurement/${row.id}`}>
-                          <Eye className="h-4 w-4 sm:mr-2" />
-                          <span className="hidden sm:inline">
-                            {tt("Detail")}
-                          </span>
-                        </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={9}
-                    className="h-28 text-center text-muted-foreground"
-                  >
-                    {tt(
-                      "No procurement records found for this role and filter.",
-                    )}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-        <TablePagination
-          page={pagination.page}
-          totalPages={pagination.totalPages}
-          totalRows={procurements.length}
-          start={pagination.start}
-          end={pagination.end}
-          onPageChange={setPage}
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
-function BudgetTable({ budgets }: { budgets: any[] }) {
-  const tt = useDbTranslation();
-
-  return (
-    <Card className="min-w-0 overflow-hidden rounded-2xl border bg-card shadow-sm">
-      <CardHeader className="border-b bg-muted/30 pb-4">
-        <CardTitle className="flex items-center justify-between gap-3 text-base">
-          <span>{tt("Budget Transactions")}</span>
-          <Badge variant="secondary">
-            {budgets.length} {tt("accounts")}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="w-full overflow-x-auto">
-          <Table className="min-w-[920px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead>{tt("BI Code")}</TableHead>
-                <TableHead>{tt("Account Code")}</TableHead>
-                <TableHead>{tt("Account Description")}</TableHead>
-                <TableHead className="text-right">
-                  {tt("Adjusted Budget")}
-                </TableHead>
-                <TableHead className="text-right">
-                  Balance Not Committed
-                </TableHead>
-                <TableHead className="text-right">{tt("Debit")}</TableHead>
-                <TableHead className="text-right">{tt("Credit")}</TableHead>
-                <TableHead>{tt("Status")}</TableHead>
-                <TableHead className="text-right">{tt("Action")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {budgets.length ? (
-                budgets.map((row) => (
-                  <TableRow key={row.id} className="hover:bg-muted/40">
-                    <TableCell className="font-medium">
-                      {row.bi_code ?? "-"}
-                    </TableCell>
-                    <TableCell>{row.account_code ?? "-"}</TableCell>
-                    <TableCell>{row.account_description ?? "-"}</TableCell>
-                    <TableCell className="text-right">
-                      {money(row.adjusted_budget)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {money(row.balance_not_committed)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {money(row.debit)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {money(row.credit)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`capitalize ${statusTone(row.status)}`}
-                      >
-                        {tt(statusLabel(row.status))}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/dashboard/budgets/${row.id}`}>
-                          <Eye className="h-4 w-4 sm:mr-2" />
-                          <span className="hidden sm:inline">
-                            {tt("Detail")}
-                          </span>
-                        </Link>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={9}
-                    className="h-28 text-center text-muted-foreground"
-                  >
-                    {tt("No budget records found for this role and filter.")}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

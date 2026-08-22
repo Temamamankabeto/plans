@@ -1,3 +1,17 @@
 @import "../styles/tailwind.css";
 @import "../styles/variables.css";
 @import "../styles/theme.css";
+
+@keyframes doorOpen {
+  0% {
+    transform: perspective(900px) rotateY(0deg);
+  }
+  100% {
+    transform: perspective(900px) rotateY(-82deg);
+  }
+}
+
+.animate-door-open {
+  animation: doorOpen 1.2s ease-in-out forwards;
+  transform-style: preserve-3d;
+}

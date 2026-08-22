@@ -16,8 +16,6 @@
     "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
-      "@/hooks/queries/order-management": ["./hooks/order-management.ts"],
-      "@/hooks/mutations/order-management": ["./hooks/order-management.ts"],
       "@/*": ["./*"]
     },
     "plugins": [{ "name": "next" }]

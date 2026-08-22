@@ -1,0 +1,78 @@
+export type TradePeriodType = 'annual' | 'monthly';
+export type TradeRecordStatus = 'draft' | 'submitted' | 'accepted' | 'returned';
+export type TradeAchievementStatus = 'pending' | 'submitted' | 'accepted' | 'returned';
+
+export interface TradeRecordItem {
+  id: number;
+  annual_plan_id: number | null;
+  office_id: number;
+  directorate_id: number | null;
+  team_id: number | null;
+  office_name?: string | null;
+  directorate_name?: string | null;
+  team_name?: string | null;
+  commodity_group: string;
+  commodity: string;
+  specification?: string | null;
+  fiscal_year: string;
+  month: number | null;
+  period_type: TradePeriodType;
+  procurement_plan: number;
+  domestic_market_plan: number;
+  international_market_plan: number;
+  export_quantity_plan: number;
+  foreign_currency_plan: number;
+  employment_male_plan: number;
+  employment_female_plan: number;
+  employment_total_plan: number;
+  procurement_achievement: number;
+  domestic_market_achievement: number;
+  international_market_achievement: number;
+  export_quantity_achievement: number;
+  foreign_currency_achievement: number;
+  employment_male_achievement: number;
+  employment_female_achievement: number;
+  employment_total_achievement: number;
+  unit: string;
+  currency_unit: string;
+  status: TradeRecordStatus;
+  plan_status: TradeRecordStatus;
+  achievement_status: TradeAchievementStatus;
+  plan_comment?: string | null;
+  achievement_comment?: string | null;
+  created_by?: number | null;
+  created_by_name?: string | null;
+  plan_accepted_by_name?: string | null;
+  achievement_accepted_by_name?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface TradeRecordFormInput {
+  annual_plan_id?: number | null;
+  commodity_group: string;
+  commodity: string;
+  specification?: string | null;
+  fiscal_year: string;
+  month?: number | null;
+  period_type: TradePeriodType;
+  procurement_plan?: number;
+  domestic_market_plan?: number;
+  international_market_plan?: number;
+  export_quantity_plan?: number;
+  foreign_currency_plan?: number;
+  employment_male_plan?: number;
+  employment_female_plan?: number;
+  employment_total_plan?: number;
+  procurement_achievement?: number;
+  domestic_market_achievement?: number;
+  international_market_achievement?: number;
+  export_quantity_achievement?: number;
+  foreign_currency_achievement?: number;
+  employment_male_achievement?: number;
+  employment_female_achievement?: number;
+  employment_total_achievement?: number;
+  unit?: string;
+  currency_unit?: string;
+  status?: TradeRecordStatus;
+}

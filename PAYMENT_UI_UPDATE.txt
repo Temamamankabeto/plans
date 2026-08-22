@@ -1,5 +1,0 @@
-Updated:
-- Added Request Type dropdown
-- Added Payment Category dropdown
-- Removed Invoice/Bill number from payment item table
-- Updated payment detail voucher table layout

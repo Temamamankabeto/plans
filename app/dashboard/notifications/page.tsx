@@ -44,7 +44,7 @@ export default function NotificationsPage() {
         <div>
           <h1 className="text-2xl font-bold">Notifications</h1>
           <p className="text-muted-foreground">
-            Action-needed payment and procurement workflow alerts.
+            Action-needed plan and achievement workflow alerts.
           </p>
         </div>
         <Button variant="outline" onClick={() => all.mutate()}>
