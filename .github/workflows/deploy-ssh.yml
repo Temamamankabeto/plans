@@ -150,7 +150,7 @@ jobs:
         run: |
           set -e
 
-          rsync \
+             rsync \
             -az \
             --delete \
             --exclude='.env' \
@@ -159,7 +159,7 @@ jobs:
             --exclude='storage/' \
             --exclude='.well-known/' \
             --exclude='tmp/' \
-            -e "ssh production" \
+            -e "ssh" \
             release/ \
             "production:$DEPLOY_PATH/"
 
