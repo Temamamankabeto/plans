@@ -30,7 +30,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Build happens on GitHub Actions, NOT on cPanel.
       - name: Build Next.js standalone application
         env:
           NODE_ENV: production
@@ -47,7 +46,6 @@ jobs:
             exit 1
           fi
 
-          # Next.js standalone does not automatically copy static/public files.
           mkdir -p .next/standalone/.next
           cp -R .next/static .next/standalone/.next/static
 
@@ -62,34 +60,28 @@ jobs:
           rm -rf release
           mkdir -p release
 
-          # Copy the complete standalone runtime.
           cp -R .next/standalone/. release/
 
-          # Database migrations required by production.
           if [ -d "database" ]; then
             cp -R database release/database
           fi
 
-          # Database migration scripts.
           if [ -d "scripts" ]; then
             cp -R scripts release/scripts
           fi
 
-          # Package metadata.
           cp package.json release/
 
           if [ -f "package-lock.json" ]; then
             cp package-lock.json release/
           fi
 
-          # Optional deployment documentation.
           if [ -f ".github/DEPLOY_SSH.md" ]; then
             cp .github/DEPLOY_SSH.md release/DEPLOY_SSH.md
           elif [ -f "DEPLOY_SSH.md" ]; then
             cp DEPLOY_SSH.md release/DEPLOY_SSH.md
           fi
 
-          # Passenger restart directory.
           mkdir -p release/tmp
 
       - name: Configure SSH
@@ -97,6 +89,7 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           set -e
 
@@ -114,39 +107,37 @@ jobs:
 
           chmod 600 ~/.ssh/known_hosts
 
+          cat > ~/.ssh/config <<EOF
+          Host production
+            HostName $SSH_HOST
+            Port $PORT_VALUE
+            User $SSH_USER
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ServerAliveInterval 30
+            ServerAliveCountMax 6
+            ConnectTimeout 30
+            ConnectionAttempts 3
+            ControlMaster auto
+            ControlPath ~/.ssh/cm-%C
+            ControlPersist 10m
+          EOF
+
+          chmod 600 ~/.ssh/config
+
       - name: Test SSH connection
-        env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
         run: |
           set -e
-
-          PORT_VALUE="${SSH_PORT:-22}"
-
-          ssh \
-            -i ~/.ssh/deploy_key \
-            -p "$PORT_VALUE" \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
-            "$SSH_USER@$SSH_HOST" \
-            "echo 'SSH connection successful'"
+          ssh production "echo 'SSH connection successful'"
 
       - name: Verify production environment
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -e
 
-          PORT_VALUE="${SSH_PORT:-22}"
-
-          ssh \
-            -i ~/.ssh/deploy_key \
-            -p "$PORT_VALUE" \
-            "$SSH_USER@$SSH_HOST" \
+          ssh production \
             "mkdir -p '$DEPLOY_PATH' && \
              if [ ! -f '$DEPLOY_PATH/.env' ]; then \
                echo 'ERROR: Production .env does not exist at $DEPLOY_PATH/.env'; \
@@ -155,14 +146,9 @@ jobs:
 
       - name: Deploy release over SSH
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -e
-
-          PORT_VALUE="${SSH_PORT:-22}"
 
           rsync \
             -az \
@@ -173,26 +159,17 @@ jobs:
             --exclude='storage/' \
             --exclude='.well-known/' \
             --exclude='tmp/' \
-            -e "ssh -i ~/.ssh/deploy_key -p $PORT_VALUE" \
+            -e "ssh production" \
             release/ \
-            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
+            "production:$DEPLOY_PATH/"
 
       - name: Run database migrations and restart application
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -e
 
-          PORT_VALUE="${SSH_PORT:-22}"
-
-          ssh \
-            -i ~/.ssh/deploy_key \
-            -p "$PORT_VALUE" \
-            "$SSH_USER@$SSH_HOST" \
-            "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          ssh production "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
           set -e
 
           NODE_BIN="/home/osdavcax/nodevenv/plans.osdavc.com/22/bin/node"
@@ -218,8 +195,6 @@ jobs:
             exit 1
           fi
 
-          # Remove Windows CRLF characters if the production .env
-          # was previously edited/uploaded from Windows.
           sed -i 's/\r$//' .env
 
           echo "Node.js version:"
