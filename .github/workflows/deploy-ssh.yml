@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install dependencies
@@ -47,7 +47,7 @@ jobs:
             exit 1
           fi
 
-          # Next.js standalone does not automatically copy these folders.
+          # Next.js standalone does not automatically copy static/public files.
           mkdir -p .next/standalone/.next
           cp -R .next/static .next/standalone/.next/static
 
@@ -62,31 +62,34 @@ jobs:
           rm -rf release
           mkdir -p release
 
-          # Production Next.js standalone application
+          # Copy the complete standalone runtime.
           cp -R .next/standalone/. release/
 
-          # Database migration system
+          # Database migrations required by production.
           if [ -d "database" ]; then
             cp -R database release/database
           fi
 
+          # Database migration scripts.
           if [ -d "scripts" ]; then
             cp -R scripts release/scripts
           fi
 
-          # Keep package metadata available on the server.
+          # Package metadata.
           cp package.json release/
 
           if [ -f "package-lock.json" ]; then
             cp package-lock.json release/
           fi
 
-          # Optional deployment documentation
-          if [ -f "DEPLOY_SSH.md" ]; then
-            cp DEPLOY_SSH.md release/
+          # Optional deployment documentation.
+          if [ -f ".github/DEPLOY_SSH.md" ]; then
+            cp .github/DEPLOY_SSH.md release/DEPLOY_SSH.md
+          elif [ -f "DEPLOY_SSH.md" ]; then
+            cp DEPLOY_SSH.md release/DEPLOY_SSH.md
           fi
 
-          # Passenger/cPanel restart directory.
+          # Passenger restart directory.
           mkdir -p release/tmp
 
       - name: Configure SSH
@@ -192,6 +195,8 @@ jobs:
             "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
           set -e
 
+          NODE_BIN="/home/osdavcax/nodevenv/plans.osdavc.com/22/bin/node"
+
           cd "$DEPLOY_PATH"
 
           echo "Deployment directory:"
@@ -207,13 +212,40 @@ jobs:
             exit 1
           fi
 
+          if [ ! -x "$NODE_BIN" ]; then
+            echo "ERROR: cPanel Node.js binary was not found:"
+            echo "$NODE_BIN"
+            exit 1
+          fi
+
+          # Remove Windows CRLF characters if the production .env
+          # was previously edited/uploaded from Windows.
+          sed -i 's/\r$//' .env
+
           echo "Node.js version:"
-          node --version
+          "$NODE_BIN" --version
+
+          echo "Checking production environment..."
+
+          MYSQL_HOST_VALUE="$(
+            "$NODE_BIN" \
+              --env-file=.env \
+              -e "process.stdout.write(process.env.MYSQL_HOST || '')"
+          )"
+
+          if [ -z "$MYSQL_HOST_VALUE" ]; then
+            echo "ERROR: MYSQL_HOST is missing from production .env."
+            exit 1
+          fi
+
+          echo "Production environment loaded."
 
           echo "Running safe database migrations..."
 
           if [ -f "scripts/db/migrate.js" ]; then
-            node scripts/db/migrate.js
+            "$NODE_BIN" \
+              --env-file=.env \
+              scripts/db/migrate.js
           else
             echo "ERROR: scripts/db/migrate.js was not deployed."
             exit 1
