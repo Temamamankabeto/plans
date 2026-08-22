@@ -30,6 +30,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Build happens on GitHub Actions, NOT on cPanel.
       - name: Build Next.js standalone application
         env:
           NODE_ENV: production
@@ -60,8 +61,14 @@ jobs:
           rm -rf release
           mkdir -p release
 
+          # ---------------------------------------------------------
+          # Next.js standalone application
+          # ---------------------------------------------------------
           cp -R .next/standalone/. release/
 
+          # ---------------------------------------------------------
+          # Database migrations
+          # ---------------------------------------------------------
           if [ -d "database" ]; then
             cp -R database release/database
           fi
@@ -70,18 +77,65 @@ jobs:
             cp -R scripts release/scripts
           fi
 
+          # ---------------------------------------------------------
+          # Package metadata
+          # ---------------------------------------------------------
           cp package.json release/
 
           if [ -f "package-lock.json" ]; then
             cp package-lock.json release/
           fi
 
+          # ---------------------------------------------------------
+          # Deployment documentation
+          # ---------------------------------------------------------
           if [ -f ".github/DEPLOY_SSH.md" ]; then
             cp .github/DEPLOY_SSH.md release/DEPLOY_SSH.md
           elif [ -f "DEPLOY_SSH.md" ]; then
             cp DEPLOY_SSH.md release/DEPLOY_SSH.md
           fi
 
+          # ---------------------------------------------------------
+          # Dedicated migration runtime
+          #
+          # Next.js standalone tracing may omit mysql2 because
+          # scripts/db/migrate.js is not part of the Next.js runtime.
+          #
+          # Install mysql2 and ALL its required dependencies here
+          # on GitHub, not on the cPanel server.
+          # ---------------------------------------------------------
+          MYSQL2_VERSION="$(node -p "require('./node_modules/mysql2/package.json').version")"
+
+          echo "Preparing mysql2 migration runtime: $MYSQL2_VERSION"
+
+          mkdir -p release/migration-runtime
+
+          cat > release/migration-runtime/package.json <<EOF
+          {
+            "name": "plans-production-migration-runtime",
+            "private": true,
+            "version": "1.0.0",
+            "dependencies": {
+              "mysql2": "$MYSQL2_VERSION"
+            }
+          }
+          EOF
+
+          npm install \
+            --prefix release/migration-runtime \
+            --omit=dev \
+            --ignore-scripts \
+            --no-audit \
+            --no-fund
+
+          if [ ! -f "release/migration-runtime/node_modules/mysql2/promise.js" ]; then
+            echo "ERROR: mysql2 migration runtime was not prepared."
+            exit 1
+          fi
+
+          echo "Migration runtime prepared successfully."
+
+          # Passenger restart directory.
           mkdir -p release/tmp
 
       - name: Configure SSH
@@ -129,7 +183,9 @@ jobs:
       - name: Test SSH connection
         run: |
           set -e
-          ssh production "echo 'SSH connection successful'"
+
+          ssh production \
+            "echo 'SSH connection successful'"
 
       - name: Verify production environment
         env:
@@ -150,7 +206,7 @@ jobs:
         run: |
           set -e
 
-             rsync \
+          rsync \
             -az \
             --delete \
             --exclude='.env' \
@@ -169,16 +225,24 @@ jobs:
         run: |
           set -e
 
-          ssh production "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
+          ssh production \
+            "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
           set -e
 
           NODE_BIN="/home/osdavcax/nodevenv/plans.osdavc.com/22/bin/node"
 
           cd "$DEPLOY_PATH"
 
+          echo "========================================"
+          echo "Production deployment"
+          echo "========================================"
+
           echo "Deployment directory:"
           pwd
 
+          # ---------------------------------------------------------
+          # Verify production files
+          # ---------------------------------------------------------
           if [ ! -f ".env" ]; then
             echo "ERROR: Production .env is missing."
             exit 1
@@ -195,11 +259,27 @@ jobs:
             exit 1
           fi
 
+          if [ ! -f "scripts/db/migrate.js" ]; then
+            echo "ERROR: scripts/db/migrate.js was not deployed."
+            exit 1
+          fi
+
+          if [ ! -d "migration-runtime/node_modules/mysql2" ]; then
+            echo "ERROR: mysql2 migration runtime was not deployed."
+            exit 1
+          fi
+
+          # ---------------------------------------------------------
+          # Normalize production .env
+          # ---------------------------------------------------------
           sed -i 's/\r$//' .env
 
           echo "Node.js version:"
           "$NODE_BIN" --version
 
+          # ---------------------------------------------------------
+          # Verify environment
+          # ---------------------------------------------------------
           echo "Checking production environment..."
 
           MYSQL_HOST_VALUE="$(
@@ -213,25 +293,41 @@ jobs:
             exit 1
           fi
 
+          echo "MYSQL_HOST configured."
           echo "Production environment loaded."
 
+          # ---------------------------------------------------------
+          # Verify mysql2 before migration
+          # ---------------------------------------------------------
+          echo "Checking migration runtime..."
+
+          NODE_PATH="$DEPLOY_PATH/migration-runtime/node_modules" \
+            "$NODE_BIN" \
+            -e "require('mysql2/promise'); console.log('mysql2 runtime available')"
+
+          # ---------------------------------------------------------
+          # Run safe database migrations
+          # ---------------------------------------------------------
           echo "Running safe database migrations..."
 
-          if [ -f "scripts/db/migrate.js" ]; then
+          NODE_PATH="$DEPLOY_PATH/migration-runtime/node_modules" \
             "$NODE_BIN" \
-              --env-file=.env \
-              scripts/db/migrate.js
-          else
-            echo "ERROR: scripts/db/migrate.js was not deployed."
-            exit 1
-          fi
+            --env-file=.env \
+            scripts/db/migrate.js
 
+          echo "Database migrations completed."
+
+          # ---------------------------------------------------------
+          # Restart Passenger / cPanel application
+          # ---------------------------------------------------------
           echo "Restarting cPanel/Passenger application..."
 
           mkdir -p tmp
           touch tmp/restart.txt
 
+          echo "========================================"
           echo "Deployment completed successfully."
+          echo "========================================"
           REMOTE
 
       - name: Deployment summary
