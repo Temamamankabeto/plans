@@ -411,8 +411,9 @@ function getClientPlanningAccessScope(user: any, roles: string[] = []): ClientPl
   ].filter(Boolean);
   const normalizedRoles = resolvedRoles.map((role) => norm(role).replace(/[^a-z0-9]+/g, "_"));
   const isPlanningRecordOwner = normalizedRoles.some((role) =>
-    ["expert", "team_leader", "teamleader", "director"].includes(role),
+    ["team_leader", "teamleader", "teamlead", "director"].includes(role),
   );
+  const isExpertRole = normalizedRoles.includes("expert");
   const mappings = Array.isArray(user?.access_mappings) ? user.access_mappings : [];
   if (mappings.length) {
     const activeMappings = mappings.filter((mapping: any) => Number(mapping?.is_active ?? 1) === 1);
@@ -431,9 +432,9 @@ function getClientPlanningAccessScope(user: any, roles: string[] = []): ClientPl
     const livestockProductNames = [...new Set<string>(activeMappings
       .filter((mapping: any) => ["livestock", "all"].includes(String(mapping?.module ?? "").toLowerCase()) && String(mapping?.scope_type ?? "").toLowerCase() === "livestock_product" && mapping?.scope_value)
       .map((mapping: any) => String(mapping.scope_value)))];
-    const canCreateAnnualPlan = isPlanningRecordOwner || has("can_create_annual_plan");
-    const canDivideMonthlyPlan = isPlanningRecordOwner || has("can_divide_monthly_plan");
-    const canUpdateAchievement = isPlanningRecordOwner || has("can_update_achievement");
+    const canCreateAnnualPlan = !isExpertRole && (isPlanningRecordOwner || has("can_create_annual_plan"));
+    const canDivideMonthlyPlan = !isExpertRole && (isPlanningRecordOwner || has("can_divide_monthly_plan"));
+    const canUpdateAchievement = !isExpertRole && (isPlanningRecordOwner || has("can_update_achievement"));
     const canViewReport = has("can_view_report");
     const canWrite = canCreateAnnualPlan || canDivideMonthlyPlan || canUpdateAchievement;
     return { module, canWrite, canCreateAnnualPlan, canDivideMonthlyPlan, canUpdateAchievement, canViewReport, reportOnly: !canWrite, cropTypeNames, livestockProductNames };
@@ -441,6 +442,20 @@ function getClientPlanningAccessScope(user: any, roles: string[] = []): ClientPl
 
   if (normalizedRoles.includes("super_admin")) {
     return { module: "all", canWrite: true, reportOnly: false, cropTypeNames: [], livestockProductNames: [] };
+  }
+
+  if (isExpertRole) {
+    return {
+      module: "all",
+      canWrite: false,
+      canCreateAnnualPlan: false,
+      canDivideMonthlyPlan: false,
+      canUpdateAchievement: false,
+      canViewReport: true,
+      reportOnly: true,
+      cropTypeNames: [],
+      livestockProductNames: [],
+    };
   }
 
   const office = user?.office?.name ?? user?.office_name;
@@ -556,16 +571,17 @@ export function PlanningRecordsPage() {
   const resolvedRoleNames = [workflowRole, currentUser?.role, ...(currentUser?.roles ?? []), ...storedRoles]
     .map((role) => norm(role).replace(/[^a-z0-9]+/g, "_"));
   const isPlanningRecordOwner = resolvedRoleNames.some((role) =>
-    ["expert", "team_leader", "teamleader", "director"].includes(role),
+    ["team_leader", "teamleader", "teamlead", "director"].includes(role),
   );
+  const isExpertRole = resolvedRoleNames.includes("expert");
   const accessScope: ClientPlanningAccessScope = {
     ...rawAccessScope,
-    canWrite: rawAccessScope.canWrite || isPlanningRecordOwner,
-    canCreateAnnualPlan: isPlanningRecordOwner || rawAccessScope.canCreateAnnualPlan || rawAccessScope.canWrite,
-    canDivideMonthlyPlan: isPlanningRecordOwner || rawAccessScope.canDivideMonthlyPlan || rawAccessScope.canWrite,
-    canUpdateAchievement: isPlanningRecordOwner || rawAccessScope.canUpdateAchievement || rawAccessScope.canWrite,
+    canWrite: !isExpertRole && (rawAccessScope.canWrite || isPlanningRecordOwner),
+    canCreateAnnualPlan: !isExpertRole && (isPlanningRecordOwner || rawAccessScope.canCreateAnnualPlan || rawAccessScope.canWrite),
+    canDivideMonthlyPlan: !isExpertRole && (isPlanningRecordOwner || rawAccessScope.canDivideMonthlyPlan || rawAccessScope.canWrite),
+    canUpdateAchievement: !isExpertRole && (isPlanningRecordOwner || rawAccessScope.canUpdateAchievement || rawAccessScope.canWrite),
     canViewReport: rawAccessScope.canViewReport ?? true,
-    reportOnly: isPlanningRecordOwner ? false : rawAccessScope.reportOnly,
+    reportOnly: isExpertRole ? true : (isPlanningRecordOwner ? false : rawAccessScope.reportOnly),
   };
   const canUseCurrentModule = accessScope.module === "all" || accessScope.module === activeModule;
   const canWriteCurrentModule = accessScope.canWrite && canUseCurrentModule;

@@ -72,9 +72,18 @@ const livestockAccessByPhone: Record<string, PlanningAccessScope> = {
 };
 
 
+function normalizedPlanningRoles(roles: string[] = []) {
+  return roles.map((role) => normalizeText(role).replace(/[^a-z0-9]+/g, "_"));
+}
+
 function isPlanningRecordOwnerRole(roles: string[] = []) {
-  const normalizedRoles = roles.map((role) => normalizeText(role).replace(/[^a-z0-9]+/g, "_"));
-  return normalizedRoles.some((role) => ["expert", "team_leader", "teamleader", "director"].includes(role));
+  return normalizedPlanningRoles(roles).some((role) =>
+    ["team_leader", "teamleader", "teamlead", "director"].includes(role),
+  );
+}
+
+function isExpertPlanningRole(roles: string[] = []) {
+  return normalizedPlanningRoles(roles).includes("expert");
 }
 
 function dynamicPlanningScope(user: any, roles: string[] = []): PlanningAccessScope | null {
@@ -99,13 +108,15 @@ function dynamicPlanningScope(user: any, roles: string[] = []): PlanningAccessSc
   const livestockProductNames = [...new Set<string>(active
     .filter((mapping: any) => ["livestock", "all"].includes(String(mapping?.module ?? "").toLowerCase()) && String(mapping?.scope_type ?? "").toLowerCase() === "livestock_product" && mapping?.scope_value)
     .map((mapping: any) => String(mapping.scope_value)))];
-  // Experts, Team Leaders and Directors are plan owners in the approved
-  // workflow. Access Mapping restricts their organization/module/data scope;
-  // approval and review rights remain controlled separately.
-  const canWrite = isPlanningRecordOwnerRole(roles) ||
+  // Planning entry starts at Team Leader. Directors can also create their own
+  // plans and achievements. Experts are explicitly report-only even when an
+  // older access mapping still contains write flags.
+  const canWrite = !isExpertPlanningRole(roles) && (
+    isPlanningRecordOwnerRole(roles) ||
     has("can_create_annual_plan") ||
     has("can_divide_monthly_plan") ||
-    has("can_update_achievement");
+    has("can_update_achievement")
+  );
   return {
     module,
     canWrite,
@@ -135,6 +146,17 @@ export function getPlanningAccessScope(user: any, roles: string[] = []): Plannin
 
   const dynamicScope = dynamicPlanningScope(user, roles);
   if (dynamicScope) return dynamicScope;
+
+  if (isExpertPlanningRole(roles)) {
+    return {
+      module: "all",
+      canWrite: false,
+      reportOnly: true,
+      canReview: false,
+      cropTypeNames: [],
+      livestockProductNames: [],
+    };
+  }
 
   const phone = normalizePhone(user?.phone);
   return cropAccessByPhone[phone] ?? livestockAccessByPhone[phone] ?? {

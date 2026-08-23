@@ -128,7 +128,7 @@ export function validateWorkflowAction(
   }
 
   if (action === "submit") {
-    if (!["expert", "team_leader", "director"].includes(actorRole)) return "Only an Expert, Team Leader, or Director can submit this record.";
+    if (!["team_leader", "director"].includes(actorRole)) return "Only a Team Leader or Director can submit this record.";
     if (Number(record?.created_by) !== actorId) return "Only the record creator can submit it.";
     return ["draft", "returned", "rejected"].includes(status) ? null : "Only a draft, returned, or rejected record can be submitted.";
   }
