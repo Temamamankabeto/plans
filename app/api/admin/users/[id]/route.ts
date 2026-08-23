@@ -87,8 +87,27 @@ function formatUser(user: any) {
 }
 
 async function getUser(id: string | number) {
-  const rows = await query<any[]>(`${userSelect} WHERE u.id = ? ${groupBy}`, [id]);
+  const rows = await query<any[]>(
+    `${userSelect} WHERE u.id = ? ${groupBy}`,
+    [id],
+  );
+
   return rows[0] ? formatUser(rows[0]) : null;
+}
+
+async function resolveDepartmentId(
+  officeId: number | null,
+  directorateId: number | null,
+  departmentId: number | null,
+) {
+  if (departmentId || !directorateId || !officeId) return departmentId;
+
+  const rows = await query<any[]>(
+    "SELECT department_id FROM directorates WHERE id = ? AND office_id = ? LIMIT 1",
+    [directorateId, officeId],
+  );
+
+  return normalizeId(rows[0]?.department_id);
 }
 
 async function validateScope(body: any) {
@@ -99,69 +118,119 @@ async function validateScope(body: any) {
   const role = normalizeRole(body.role);
 
   if (!officeId) return "Office is required";
+
   if (!directorateId && ["Manager", "Adviser", "Director", "Team Leader", "Expert"].includes(role)) {
     return "Directorate is required for this role";
   }
+
   if (!departmentId && ["Manager", "Adviser"].includes(role)) {
     return "Department is required for Manager and Adviser";
   }
-  if (teamId && !directorateId) return "Select directorate before selecting team";
+
+  if (teamId && !directorateId) {
+    return "Select directorate before selecting team";
+  }
 
   if (departmentId) {
     const rows = await query<any[]>(
       "SELECT id FROM departments WHERE id = ? AND office_id = ? AND is_active = 1 LIMIT 1",
       [departmentId, officeId],
     );
-    if (!rows.length) return "Selected department does not belong to selected office";
+
+    if (!rows.length) {
+      return "Selected department does not belong to selected office";
+    }
   }
 
   if (directorateId) {
-    if (!departmentId) return "Select department before selecting directorate";
     const rows = await query<any[]>(
-      "SELECT id FROM directorates WHERE id = ? AND office_id = ? AND department_id = ? LIMIT 1",
-      [directorateId, officeId, departmentId],
+      "SELECT id, department_id FROM directorates WHERE id = ? AND office_id = ? LIMIT 1",
+      [directorateId, officeId],
     );
-    if (!rows.length) return "Selected directorate does not belong to selected department";
+
+    if (!rows.length) {
+      return "Selected directorate does not belong to selected office";
+    }
+
+    if (departmentId && Number(rows[0].department_id) !== Number(departmentId)) {
+      return "Selected directorate does not belong to selected department";
+    }
   }
 
   if (teamId) {
-    const rows = await query<any[]>("SELECT id FROM teams WHERE id = ? AND directorate_id = ? LIMIT 1", [
-      teamId,
-      directorateId,
-    ]);
-    if (!rows.length) return "Selected team does not belong to selected directorate";
+    const rows = await query<any[]>(
+      "SELECT id FROM teams WHERE id = ? AND directorate_id = ? LIMIT 1",
+      [teamId, directorateId],
+    );
+
+    if (!rows.length) {
+      return "Selected team does not belong to selected directorate";
+    }
   }
 
   return null;
 }
 
-export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const { id } = await params;
   const user = await getUser(id);
-  if (!user) return fail("User not found", 404);
+
+  if (!user) {
+    return fail("User not found", 404);
+  }
+
   return ok(user);
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const { id } = await params;
   const body = await readJson<any>(request);
+
   const name = String(body.name ?? "").trim();
   const email = String(body.email ?? "").trim().toLowerCase();
   const role = normalizeRole(body.role);
   const officeId = normalizeId(body.office_id);
   const directorateId = normalizeId(body.directorate_id);
-  const departmentId = normalizeId(body.department_id);
+  const submittedDepartmentId = normalizeId(body.department_id);
   const teamId = normalizeId(body.team_id);
 
-  if (!name || !email || !role) return fail("Name, email and role are required", 422);
+  if (!name || !email || !role) {
+    return fail("Name, email and role are required", 422);
+  }
 
   const scopeError = await validateScope(body);
-  if (scopeError) return fail(scopeError, 422);
+  if (scopeError) {
+    return fail(scopeError, 422);
+  }
+
+  const departmentId = await resolveDepartmentId(
+    officeId,
+    directorateId,
+    submittedDepartmentId,
+  );
+
+  if (directorateId && !departmentId) {
+    return fail("Selected directorate has no valid department assignment", 422);
+  }
 
   await transaction(async (conn) => {
     await conn.execute(
       `UPDATE users
-       SET name = ?, email = ?, phone = ?, status = ?, office_id = ?, directorate_id = ?, department_id = ?, team_id = ?, professional_level = ?
+       SET name = ?,
+           email = ?,
+           phone = ?,
+           status = ?,
+           office_id = ?,
+           directorate_id = ?,
+           department_id = ?,
+           team_id = ?,
+           professional_level = ?
        WHERE id = ?`,
       [
         name,
@@ -177,19 +246,41 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       ],
     );
 
-    const [roleRows]: any = await conn.execute("SELECT id FROM roles WHERE name = ? LIMIT 1", [role]);
-    if (!roleRows.length) throw new Error("Selected role does not exist");
+    const [roleRows]: any = await conn.execute(
+      "SELECT id FROM roles WHERE name = ? LIMIT 1",
+      [role],
+    );
 
-    await conn.execute("DELETE FROM user_roles WHERE user_id = ?", [id]);
-    await conn.execute("INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", [id, roleRows[0].id]);
+    if (!roleRows.length) {
+      throw new Error("Selected role does not exist");
+    }
+
+    await conn.execute(
+      "DELETE FROM user_roles WHERE user_id = ?",
+      [id],
+    );
+
+    await conn.execute(
+      "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)",
+      [id, roleRows[0].id],
+    );
   });
 
   const user = await getUser(id);
+
   return ok(user, "User updated successfully");
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const { id } = await params;
-  await execute("DELETE FROM users WHERE id = ?", [id]);
+
+  await execute(
+    "DELETE FROM users WHERE id = ?",
+    [id],
+  );
+
   return ok(null, "User deleted successfully");
 }

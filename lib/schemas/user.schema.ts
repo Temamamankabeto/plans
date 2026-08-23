@@ -1,7 +1,15 @@
 import { z } from "zod";
 
 const nullableNumber = z.preprocess((value) => {
-  if (value === "" || value === undefined || value === null || value === "none") return null;
+  if (
+    value === "" ||
+    value === undefined ||
+    value === null ||
+    value === "none"
+  ) {
+    return null;
+  }
+
   const parsed = Number(value);
   return Number.isNaN(parsed) ? value : parsed;
 }, z.number().int().positive().nullable().optional());
@@ -33,29 +41,71 @@ const common = {
   titer: z.any().nullable().optional(),
 };
 
-function validateScope(value: { role?: string; office_id?: number | null; directorate_id?: number | null; department_id?: number | null; team_id?: number | null }, ctx: z.RefinementCtx) {
+function validateScope(
+  value: {
+    role?: string;
+    office_id?: number | null;
+    directorate_id?: number | null;
+    department_id?: number | null;
+    team_id?: number | null;
+  },
+  ctx: z.RefinementCtx,
+) {
   if (!value.office_id) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["office_id"], message: "Office is required" });
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["office_id"],
+      message: "Office is required",
+    });
   }
 
-  if (["Manager", "Adviser", "Director", "Team Leader", "Expert"].includes(value.role ?? "") && !value.directorate_id) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["directorate_id"], message: "Directorate is required for this role" });
+  if (
+    ["Manager", "Adviser", "Director", "Team Leader", "Expert"].includes(
+      value.role ?? "",
+    ) &&
+    !value.directorate_id
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["directorate_id"],
+      message: "Directorate is required for this role",
+    });
   }
 
-  if (["Manager", "Adviser", "Director", "Team Leader", "Expert"].includes(value.role ?? "") && !value.department_id) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["department_id"], message: "Department is required before selecting a directorate" });
+  // Manager and Adviser are explicitly department-scoped.
+  // For Director, Team Leader and Expert the selected directorate already
+  // identifies its parent department, so the API resolves department_id
+  // safely from the directorate during create/update.
+  if (
+    ["Manager", "Adviser"].includes(value.role ?? "") &&
+    !value.department_id
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["department_id"],
+      message: "Department is required for Manager and Adviser",
+    });
   }
 
   if (value.role === "Team Leader" && !value.team_id) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["team_id"], message: "Team is required for Team Leader" });
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["team_id"],
+      message: "Team is required for Team Leader",
+    });
   }
 }
 
 export const createUserSchema = z
   .object({
     ...common,
-    password: z.string().min(8, "Password must be at least 8 characters").max(255),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(255),
   })
   .superRefine(validateScope);
 
-export const updateUserSchema = z.object(common).superRefine(validateScope);
+export const updateUserSchema = z
+  .object(common)
+  .superRefine(validateScope);
