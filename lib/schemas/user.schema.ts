@@ -42,8 +42,8 @@ function validateScope(value: { role?: string; office_id?: number | null; direct
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["directorate_id"], message: "Directorate is required for this role" });
   }
 
-  if (["Manager", "Adviser"].includes(value.role ?? "") && !value.department_id) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["department_id"], message: "Department is required for Manager and Adviser" });
+  if (["Manager", "Adviser", "Director", "Team Leader", "Expert"].includes(value.role ?? "") && !value.department_id) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["department_id"], message: "Department is required before selecting a directorate" });
   }
 
   if (value.role === "Team Leader" && !value.team_id) {
