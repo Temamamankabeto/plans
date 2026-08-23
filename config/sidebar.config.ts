@@ -544,8 +544,8 @@ const organizationItem: SidebarItem = {
   icon: Building2,
   children: [
     { label: "Offices", href: "/dashboard/offices", permission: "offices.read" },
-    { label: "Directorates", href: "/dashboard/directorates", permission: "directorates.read" },
     { label: "Departments", href: "/dashboard/departments", permission: "departments.view" },
+    { label: "Directorates", href: "/dashboard/directorates", permission: "directorates.read" },
     { label: "Teams", href: "/dashboard/teams", permission: "teams.read" },
   ],
 };
@@ -587,8 +587,8 @@ const roleSidebars: Record<RoleKey, RoleSidebar> = {
             icon: Building2,
             children: [
               { label: "Offices", href: "/dashboard/offices", permission: "offices.read" },
-              { label: "Directorates", href: "/dashboard/directorates", permission: "directorates.read" },
               { label: "Departments", href: "/dashboard/departments", permission: "departments.view" },
+              { label: "Directorates", href: "/dashboard/directorates", permission: "directorates.read" },
               { label: "Teams", href: "/dashboard/teams", permission: "teams.read" },
             ],
           },
