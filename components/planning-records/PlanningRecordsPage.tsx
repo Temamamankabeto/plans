@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   SplitSquareHorizontal,
   Target,
+  Trash2,
+  Ban,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -564,6 +566,10 @@ export function PlanningRecordsPage() {
   const [workflowHistory, setWorkflowHistory] = useState<WorkflowHistoryItem[]>([]);
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [removeRecord, setRemoveRecord] = useState<PlanningRecordItem | null>(null);
+  const [cancelRecord, setCancelRecord] = useState<PlanningRecordItem | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [removeLoading, setRemoveLoading] = useState(false);
 
   const storedRoles = authService.getStoredRoles();
   const workflowRole = clientWorkflowRole(currentUser, storedRoles);
@@ -1021,6 +1027,47 @@ export function PlanningRecordsPage() {
     setDetailOpen(false);
     setBulkComment("");
     setBulkAction(action);
+  }
+
+
+  async function deleteDraftPlan() {
+    if (!removeRecord) return;
+    setRemoveLoading(true);
+    try {
+      const response = await apiRequest<null>(`/api/admin/planning-records/${removeRecord.id}`, { method: "DELETE" });
+      toast.success(response.message);
+      setRemoveRecord(null);
+      if (selectedAnnual?.id === removeRecord.id) setDetailOpen(false);
+      await refreshAll(page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to delete draft plan");
+    } finally {
+      setRemoveLoading(false);
+    }
+  }
+
+  async function cancelApprovedPlan() {
+    if (!cancelRecord) return;
+    if (!cancelReason.trim()) {
+      toast.error("Cancellation reason is required.");
+      return;
+    }
+    setRemoveLoading(true);
+    try {
+      const response = await apiRequest<null>(`/api/admin/planning-records/${cancelRecord.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ target: "plan", action: "cancel", comment: cancelReason.trim() }),
+      });
+      toast.success(response.message);
+      setCancelRecord(null);
+      setCancelReason("");
+      if (selectedAnnual?.id === cancelRecord.id) setDetailOpen(false);
+      await refreshAll(page);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to cancel approved plan");
+    } finally {
+      setRemoveLoading(false);
+    }
   }
 
   async function submitMonthlyTarget(record: PlanningRecordItem, target: WorkflowTarget) {
@@ -1494,6 +1541,18 @@ export function PlanningRecordsPage() {
                           {canPerformWorkflowAction(record, "plan", "reject") && (
                             <DropdownMenuItem onClick={() => openWorkflowDecision(record, "plan", "reject")}>
                               Reject Plan
+                            </DropdownMenuItem>
+                          )}
+                          {Number(record.created_by) === Number(currentUser?.id) && recordWorkflowStatus(record, "plan") === "draft" && (
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setRemoveRecord(record)}>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete Draft Plan
+                            </DropdownMenuItem>
+                          )}
+                          {["super_admin", "ocdu_director", "ocdu_manager"].includes(workflowRole) && record.period_type === "annual" && recordWorkflowStatus(record, "plan") === "finally_approved" && (
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => { setCancelRecord(record); setCancelReason(""); }}>
+                              <Ban className="mr-2 h-4 w-4" />
+                              Cancel Approved Plan
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
@@ -2000,6 +2059,42 @@ export function PlanningRecordsPage() {
             >
               {bulkLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Apply to Eligible Records
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!removeRecord} onOpenChange={(open) => !open && setRemoveRecord(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Delete Draft Plan?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This permanently removes the draft plan. Submitted or approved plans cannot be deleted. This action cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveRecord(null)} disabled={removeLoading}>Keep Plan</Button>
+            <Button variant="destructive" onClick={deleteDraftPlan} disabled={removeLoading}>
+              {removeLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Delete Draft Plan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!cancelRecord} onOpenChange={(open) => { if (!open) { setCancelRecord(null); setCancelReason(""); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Cancel Finally Approved Plan?</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              The plan and its monthly distributions will be preserved for audit history but marked cancelled and removed from active approved planning.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="plan-cancel-reason">Cancellation reason</Label>
+              <Textarea id="plan-cancel-reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Explain why this approved plan is being cancelled..." rows={4} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCancelRecord(null); setCancelReason(""); }} disabled={removeLoading}>Keep Plan</Button>
+            <Button variant="destructive" onClick={cancelApprovedPlan} disabled={removeLoading || !cancelReason.trim()}>
+              {removeLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cancel Approved Plan
             </Button>
           </DialogFooter>
         </DialogContent>

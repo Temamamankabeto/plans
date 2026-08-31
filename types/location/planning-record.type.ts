@@ -14,7 +14,8 @@ export type PlanningWorkflowStatus =
   | "submitted_director"
   | "rejected"
   | "approved_director"
-  | "finally_approved";
+  | "finally_approved"
+  | "cancelled";
 
 export interface PlanningRecordItem {
   id: number;

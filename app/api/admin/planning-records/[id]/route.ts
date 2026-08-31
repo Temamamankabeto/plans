@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { execute, query } from "@/lib/server/db";
+import { execute, query, transaction } from "@/lib/server/db";
 import { getAuthUser } from "@/lib/server/auth";
 import { getUserAccessMappings } from "@/lib/server/dynamic-access";
 import { validatePlanningRecordInput } from "@/lib/schemas/planning-record.schema";
@@ -202,6 +202,59 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const target = String(body.target ?? "plan") as PlanningWorkflowTarget;
   const actorRole = getPlanningWorkflowRole(user, auth.roles);
 
+  if (action === "cancel") {
+    if (target !== "plan" || existing.period_type !== "annual") {
+      return fail("Only an Annual Plan can be cancelled.", 422);
+    }
+    if (!["super_admin", "ocdu_director", "ocdu_manager"].includes(actorRole)) {
+      return fail("Only Super Admin or an authorized OCDU final approver can cancel a finally approved Annual Plan.", 403);
+    }
+    if (workflowStatus(existing, "plan") !== "finally_approved") {
+      return fail("Only a finally approved Annual Plan can be cancelled. Draft plans should be deleted and submitted plans should be returned.", 422);
+    }
+    if (!comment) return fail("Cancellation reason is required.", 422);
+
+    await transaction(async (connection) => {
+      const childRows = await connection.query(
+        "SELECT id, plan_status, achievement_status FROM planning_records WHERE annual_plan_id = ?",
+        [existing.id],
+      );
+      const children = (childRows as any)[0] as Array<{ id: number; plan_status: string; achievement_status: string }>;
+
+      await connection.execute(
+        `UPDATE planning_records
+         SET plan_status = 'cancelled', status = 'rejected', is_locked = 1,
+             plan_comment = ?, approval_comment = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [comment, comment, existing.id],
+      );
+      await connection.execute(
+        `INSERT INTO planning_record_workflow_history
+           (planning_record_id, target, action, from_status, to_status, comment, acted_by, acted_as)
+         VALUES (?, 'plan', 'cancel', ?, 'cancelled', ?, ?, ?)`,
+        [existing.id, workflowStatus(existing, "plan"), comment, Number(auth.id), actorRole],
+      );
+
+      for (const child of children) {
+        await connection.execute(
+          `UPDATE planning_records
+           SET plan_status = 'cancelled', achievement_status = 'cancelled', status = 'rejected',
+               is_locked = 1, plan_comment = ?, achievement_comment = ?, approval_comment = ?, updated_at = NOW()
+           WHERE id = ?`,
+          [comment, comment, comment, child.id],
+        );
+        await connection.execute(
+          `INSERT INTO planning_record_workflow_history
+             (planning_record_id, target, action, from_status, to_status, comment, acted_by, acted_as)
+           VALUES (?, 'plan', 'cancel', ?, 'cancelled', ?, ?, ?)`,
+          [child.id, child.plan_status || 'draft', comment, Number(auth.id), actorRole],
+        );
+      }
+    });
+
+    return ok(null, "Annual Plan cancelled successfully. Its monthly distributions are preserved for audit but excluded from active approved planning.");
+  }
+
   if (!["comment", "approve"].includes(action)) {
     return fail("Invalid review action.", 422);
   }
@@ -246,8 +299,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id } = await params;
   const existing = await scopedRecordExists(id, user, auth.roles);
   if (!existing) return fail("Planning record not found", 404);
-  if (!isSuperAdmin(auth.roles)) return fail("Only Super Admin can delete planning records", 403);
+
+  const planState = workflowStatus(existing, "plan");
+  if (planState !== "draft") {
+    return fail("Only a draft plan can be permanently deleted. Submitted plans must be returned; finally approved plans must be cancelled instead.", 422);
+  }
+  if (!isSuperAdmin(auth.roles) && Number(existing.created_by) !== Number(auth.id)) {
+    return fail("Only the draft plan creator or Super Admin can delete this plan.", 403);
+  }
+  if (existing.period_type === "annual") {
+    const children = await query<any[]>("SELECT id FROM planning_records WHERE annual_plan_id = ? LIMIT 1", [existing.id]);
+    if (children.length) {
+      return fail("This Annual Plan already has monthly distributions. Remove the draft monthly distributions first, or correct the Annual Plan instead.", 422);
+    }
+  }
 
   await execute("DELETE FROM planning_records WHERE id = ?", [id]);
-  return ok(null, "Planning record deleted successfully");
+  return ok(null, "Draft planning record deleted successfully");
 }
