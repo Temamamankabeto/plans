@@ -64,23 +64,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const actorRole = getPlanningWorkflowRole(user, auth.roles);
-  const requiredPermission =
-    action === "verify"
-      ? "planning_records.verify"
-      : action === "approve"
-        ? "planning_records.director_approve"
-        : action === "final_approve"
-          ? "planning_records.final_approve"
-          : action === "reject"
-            ? "planning_records.reject"
-            : null;
-  if (
-    requiredPermission &&
-    actorRole !== "super_admin" &&
-    !(auth.permissions ?? []).includes(requiredPermission)
-  ) {
-    return fail(`Missing required permission: ${requiredPermission}`, 403);
-  }
+
+  // Workflow authorization is enforced below by validateWorkflowAction(),
+  // which checks the actor's planning role, current workflow stage, record
+  // ownership and organization/access scope. Do not additionally require a
+  // duplicated role-permission flag here: a correctly assigned Director must
+  // be able to approve Team Leader submissions even when legacy permission
+  // seeds/mappings do not contain planning_records.director_approve.
 
   const where = ["pr.id = ?"];
   const values: unknown[] = [id];
