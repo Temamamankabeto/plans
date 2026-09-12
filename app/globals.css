@@ -46,3 +46,28 @@ main,
 .min-h-full {
   background-color: #ffffff !important;
 }
+
+/* =========================================================
+   SHADCN / RADIX DIALOG SURFACE FIX
+   Keep portal-rendered dialogs fully opaque.
+   ========================================================= */
+
+[role="dialog"][data-state="open"] {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  opacity: 1 !important;
+  isolation: isolate;
+}
+
+[role="dialog"] input,
+[role="dialog"] textarea,
+[role="dialog"] select,
+[role="dialog"] button[role="combobox"] {
+  background-color: #ffffff !important;
+}
+
+[role="dialog"] .bg-background,
+[role="dialog"] .bg-card {
+  background-color: #ffffff !important;
+}
