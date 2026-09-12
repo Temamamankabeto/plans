@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import {
   BadgeCheck,
   Building2,
@@ -43,6 +43,17 @@ function dateTime(value?: string | null) {
   return Number.isNaN(date.getTime()) ? "Not available" : date.toLocaleString();
 }
 
+function getInitials(name?: string | null) {
+  const words = String(name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!words.length) return "U";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0] ?? ""}${words[words.length - 1][0] ?? ""}`.toUpperCase();
+}
+
 export default function ProfilePage() {
   const profileQuery = useProfileQuery();
   const user = profileQuery.data;
@@ -83,7 +94,7 @@ export default function ProfilePage() {
 
   if (profileQuery.isLoading) {
     return (
-      <div className="flex min-h-[360px] items-center justify-center text-muted-foreground">
+      <div className="flex min-h-[420px] items-center justify-center bg-white text-muted-foreground">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
         Loading profile...
       </div>
@@ -92,205 +103,370 @@ export default function ProfilePage() {
 
   if (profileQuery.isError || !user) {
     return (
-      <Card>
-        <CardContent className="flex min-h-64 flex-col items-center justify-center gap-4">
-          <p className="text-muted-foreground">Unable to fetch your profile information.</p>
-          <Button variant="outline" onClick={() => profileQuery.refetch()}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Try again
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="bg-white">
+        <Card className="border-slate-200 shadow-sm">
+          <CardContent className="flex min-h-64 flex-col items-center justify-center gap-4">
+            <p className="text-muted-foreground">Unable to fetch your profile information.</p>
+            <Button variant="outline" onClick={() => profileQuery.refetch()}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   const roles = user.roles ?? (user.role ? [user.role] : []);
   const mappings = user.access_mappings ?? [];
   const permissions = user.permissions ?? [];
+  const initials = getInitials(user.name);
+
+  const primaryRole = roles[0] ?? user.role ?? "User";
+  const organizationPath = [
+    user.office?.name,
+    user.department?.name,
+    user.directorate?.name,
+    user.team?.name,
+  ].filter(Boolean);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
-          <p className="text-muted-foreground">Your live account, organization, access and security information.</p>
-        </div>
-        <Button variant="outline" onClick={() => profileQuery.refetch()} disabled={profileQuery.isFetching}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${profileQuery.isFetching ? "animate-spin" : ""}`} />
-          Refresh
-        </Button>
-      </div>
+    <div className="min-h-full bg-white pb-8">
+      <div className="mx-auto max-w-[1440px] space-y-6">
+        {/* Profile hero */}
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="h-28 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 sm:h-36" />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserCircle className="h-5 w-5" />
-            Personal Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <InfoField icon={<UserCircle />} label="Full Name" value={display(user.name)} />
-          <InfoField icon={<Mail />} label="Email" value={display(user.email)} />
-          <InfoField icon={<Phone />} label="Phone" value={display(user.phone)} />
-          <InfoField icon={<MapPin />} label="Address" value={display(user.address)} />
-          <InfoField
-            icon={<BadgeCheck />}
-            label="Account Status"
-            value={user.status === "disabled" ? "Disabled" : "Active"}
-          />
-          <InfoField icon={<Shield />} label="Professional Level" value={display(user.professional_level)} />
-        </CardContent>
-      </Card>
+          <div className="px-5 pb-6 sm:px-7 lg:px-8">
+            <div className="-mt-12 flex flex-col gap-5 sm:-mt-14 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border-4 border-white bg-slate-100 text-2xl font-bold text-slate-900 shadow-md sm:h-28 sm:w-28 sm:text-3xl">
+                  {initials}
+                </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Organization Assignment
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <InfoField icon={<Building2 />} label="Office" value={display(user.office?.name)} />
-          <InfoField icon={<Building2 />} label="Directorate" value={display(user.directorate?.name)} />
-          <InfoField icon={<Users />} label="Department" value={display(user.department?.name)} />
-          <InfoField icon={<Users />} label="Team" value={display(user.team?.name)} />
-        </CardContent>
-      </Card>
+                <div className="pb-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+                      {display(user.name)}
+                    </h1>
+                    <Badge
+                      variant="outline"
+                      className={
+                        user.status === "disabled"
+                          ? "border-red-200 bg-red-50 text-red-700"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      }
+                    >
+                      <BadgeCheck className="mr-1 h-3.5 w-3.5" />
+                      {user.status === "disabled" ? "Disabled" : "Active"}
+                    </Badge>
+                  </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Roles and Access
-            </CardTitle>
-            <CardDescription>Access is calculated from roles, permissions and organization mappings.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="mb-2 text-sm text-muted-foreground">Assigned Roles</p>
-              <div className="flex flex-wrap gap-2">
-                {roles.length ? roles.map((role) => <Badge key={role}>{role}</Badge>) : <Badge variant="outline">No role</Badge>}
+                  <p className="mt-1 text-sm font-medium text-slate-600">{primaryRole}</p>
+
+                  {organizationPath.length > 0 && (
+                    <p className="mt-2 max-w-3xl text-sm text-slate-500">
+                      {organizationPath.join("  •  ")}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Summary label="Effective Permissions" value={permissions.length} />
-              <Summary label="Access Mappings" value={mappings.length} />
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarClock className="h-5 w-5" />
-              Account Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <InfoField icon={<CalendarClock />} label="Last Login" value={dateTime(user.last_login_at)} />
-            <InfoField icon={<CalendarClock />} label="Account Created" value={dateTime(user.created_at)} />
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileSignature className="h-5 w-5" />
-            Approval Documents
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-3">
-          <DocumentLink label="Signature" href={user.signature_url} />
-          <DocumentLink label="Stamp" href={user.stamp_url} />
-          <DocumentLink label="Title Document" href={user.titer_url} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <KeyRound className="h-5 w-5" />
-            Change Password
-          </CardTitle>
-          <CardDescription>
-            For security, the system never displays your current password. Enter it to verify your identity.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={submitPassword} className="grid gap-4 md:grid-cols-3">
-            <PasswordField
-              id="current_password"
-              label="Current Password"
-              autoComplete="current-password"
-              value={passwordForm.current_password}
-              onChange={(value) => setPasswordForm((current) => ({ ...current, current_password: value }))}
-            />
-            <PasswordField
-              id="new_password"
-              label="New Password"
-              autoComplete="new-password"
-              value={passwordForm.new_password}
-              onChange={(value) => setPasswordForm((current) => ({ ...current, new_password: value }))}
-            />
-            <PasswordField
-              id="new_password_confirmation"
-              label="Confirm New Password"
-              autoComplete="new-password"
-              value={passwordForm.new_password_confirmation}
-              onChange={(value) =>
-                setPasswordForm((current) => ({ ...current, new_password_confirmation: value }))
-              }
-            />
-            <div className="md:col-span-3">
-              <Button type="submit" disabled={changePassword.isPending}>
-                {changePassword.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-2 h-4 w-4" />
-                )}
-                Update Password
+              <Button
+                variant="outline"
+                onClick={() => profileQuery.refetch()}
+                disabled={profileQuery.isFetching}
+                className="self-start bg-white sm:self-auto"
+              >
+                <RefreshCw
+                  className={`mr-2 h-4 w-4 ${profileQuery.isFetching ? "animate-spin" : ""}`}
+                />
+                Refresh Profile
               </Button>
             </div>
-          </form>
-        </CardContent>
-      </Card>
+          </div>
+        </section>
+
+        {/* Profile summary */}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Assigned Roles" value={roles.length} helper={primaryRole} />
+          <StatCard label="Permissions" value={permissions.length} helper="Effective permissions" />
+          <StatCard label="Access Mappings" value={mappings.length} helper="Organization mappings" />
+          <StatCard
+            label="Account Status"
+            value={user.status === "disabled" ? "Disabled" : "Active"}
+            helper="Current account state"
+          />
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1.45fr_0.85fr]">
+          <div className="space-y-6">
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <UserCircle className="h-5 w-5" />
+                  Personal Information
+                </CardTitle>
+                <CardDescription>
+                  Identity and contact information associated with your account.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-x-8 gap-y-5 pt-6 md:grid-cols-2">
+                <ProfileRow icon={<UserCircle />} label="Full Name" value={display(user.name)} />
+                <ProfileRow icon={<Mail />} label="Email Address" value={display(user.email)} />
+                <ProfileRow icon={<Phone />} label="Phone Number" value={display(user.phone)} />
+                <ProfileRow icon={<MapPin />} label="Address" value={display(user.address)} />
+                <ProfileRow
+                  icon={<Shield />}
+                  label="Professional Level"
+                  value={display(user.professional_level)}
+                />
+                <ProfileRow
+                  icon={<BadgeCheck />}
+                  label="Account Status"
+                  value={user.status === "disabled" ? "Disabled" : "Active"}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Building2 className="h-5 w-5" />
+                  Organization Assignment
+                </CardTitle>
+                <CardDescription>
+                  Your current position within the organizational hierarchy.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 pt-6 sm:grid-cols-2">
+                <OrganizationItem label="Office" value={display(user.office?.name)} />
+                <OrganizationItem label="Department" value={display(user.department?.name)} />
+                <OrganizationItem label="Directorate" value={display(user.directorate?.name)} />
+                <OrganizationItem label="Team" value={display(user.team?.name)} />
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Shield className="h-5 w-5" />
+                  Roles & Access
+                </CardTitle>
+                <CardDescription>
+                  Access is calculated from your role, permissions and organization mappings.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 pt-6">
+                <div>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Assigned Roles
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {roles.length ? (
+                      roles.map((role) => (
+                        <Badge
+                          key={role}
+                          variant="outline"
+                          className="border-slate-200 bg-slate-50 px-3 py-1 text-slate-700"
+                        >
+                          {role}
+                        </Badge>
+                      ))
+                    ) : (
+                      <Badge variant="outline">No role</Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <MiniSummary label="Effective Permissions" value={permissions.length} />
+                  <MiniSummary label="Access Mappings" value={mappings.length} />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-6">
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <CalendarClock className="h-5 w-5" />
+                  Account Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5 pt-6">
+                <ProfileRow
+                  icon={<CalendarClock />}
+                  label="Last Login"
+                  value={dateTime(user.last_login_at)}
+                />
+                <ProfileRow
+                  icon={<CalendarClock />}
+                  label="Account Created"
+                  value={dateTime(user.created_at)}
+                />
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <FileSignature className="h-5 w-5" />
+                  Approval Documents
+                </CardTitle>
+                <CardDescription>
+                  Official documents used for authorized approval workflows.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 pt-6">
+                <DocumentLink label="Signature" href={user.signature_url} />
+                <DocumentLink label="Stamp" href={user.stamp_url} />
+                <DocumentLink label="Title Document" href={user.titer_url} />
+              </CardContent>
+            </Card>
+
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <KeyRound className="h-5 w-5" />
+                  Security
+                </CardTitle>
+                <CardDescription>
+                  Change your password without exposing your existing credentials.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <form onSubmit={submitPassword} className="space-y-4">
+                  <PasswordField
+                    id="current_password"
+                    label="Current Password"
+                    autoComplete="current-password"
+                    value={passwordForm.current_password}
+                    onChange={(value) =>
+                      setPasswordForm((current) => ({ ...current, current_password: value }))
+                    }
+                  />
+
+                  <PasswordField
+                    id="new_password"
+                    label="New Password"
+                    autoComplete="new-password"
+                    value={passwordForm.new_password}
+                    onChange={(value) =>
+                      setPasswordForm((current) => ({ ...current, new_password: value }))
+                    }
+                  />
+
+                  <PasswordField
+                    id="new_password_confirmation"
+                    label="Confirm New Password"
+                    autoComplete="new-password"
+                    value={passwordForm.new_password_confirmation}
+                    onChange={(value) =>
+                      setPasswordForm((current) => ({
+                        ...current,
+                        new_password_confirmation: value,
+                      }))
+                    }
+                  />
+
+                  <Button type="submit" className="w-full" disabled={changePassword.isPending}>
+                    {changePassword.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Update Password
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function InfoField({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+function StatCard({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: number | string;
+  helper: string;
+}) {
   return (
-    <div className="rounded-lg border bg-muted/20 p-4">
-      <p className="mb-1 flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="[&>svg]:h-4 [&>svg]:w-4">{icon}</span>
-        {label}
-      </p>
-      <p className="break-words font-medium">{value}</p>
+    <Card className="border-slate-200 bg-white shadow-sm">
+      <CardContent className="p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+        <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+        <p className="mt-1 truncate text-sm text-slate-500">{helper}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProfileRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-3">
+      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 [&>svg]:h-4 [&>svg]:w-4">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="mt-1 break-words text-sm font-semibold text-slate-900">{value}</p>
+      </div>
     </div>
   );
 }
 
-function Summary({ label, value }: { label: string; value: number }) {
+function OrganizationItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border p-4">
-      <p className="text-2xl font-bold">{value}</p>
-      <p className="text-sm text-muted-foreground">{label}</p>
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-2 break-words text-sm font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function MiniSummary({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+      <p className="text-2xl font-bold text-slate-950">{value}</p>
+      <p className="mt-1 text-sm text-slate-500">{label}</p>
     </div>
   );
 }
 
 function DocumentLink({ label, href }: { label: string; href?: string | null }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border p-4">
-      <span className="font-medium">{label}</span>
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-900">{label}</p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          {href ? "Document available" : "Not uploaded"}
+        </p>
+      </div>
+
       {href ? (
         <Button asChild variant="outline" size="sm">
-          <a href={href} target="_blank" rel="noreferrer">View</a>
+          <a href={href} target="_blank" rel="noreferrer">
+            View
+          </a>
         </Button>
       ) : (
-        <span className="text-sm text-muted-foreground">Not uploaded</span>
+        <span className="text-xs font-medium text-slate-400">Unavailable</span>
       )}
     </div>
   );
@@ -320,6 +496,7 @@ function PasswordField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         required
+        className="bg-white"
       />
     </div>
   );
