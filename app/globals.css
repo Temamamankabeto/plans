@@ -15,3 +15,34 @@
   animation: doorOpen 1.2s ease-in-out forwards;
   transform-style: preserve-3d;
 }
+
+
+/* =========================================================
+   GLOBAL APPLICATION BACKGROUND
+   Keep page/layout backgrounds white from one global place.
+   Component-specific backgrounds (buttons, badges, charts,
+   status indicators, inputs, dialogs, etc.) are preserved.
+   ========================================================= */
+
+:root {
+  --background: 0 0% 100%;
+  --card: 0 0% 100%;
+  --popover: 0 0% 100%;
+}
+
+html,
+body {
+  background-color: #ffffff !important;
+}
+
+body,
+main,
+[data-page-content],
+.dashboard-layout,
+.dashboard-content,
+.page-content,
+.min-h-screen,
+.min-h-dvh,
+.min-h-full {
+  background-color: #ffffff !important;
+}
