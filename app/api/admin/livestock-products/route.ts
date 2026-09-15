@@ -35,6 +35,8 @@ export async function GET(request: NextRequest) {
   const selectSql = `
     SELECT
       ct.id,
+      ct.livestock_type_id,
+      lt.name AS livestock_type_name,
       ct.name,
       ct.code,
       ct.is_active,
@@ -42,9 +44,10 @@ export async function GET(request: NextRequest) {
       ct.updated_at,
       COUNT(c.id) AS livestock_product_types_count
     FROM livestock_products ct
+    LEFT JOIN livestock_types lt ON lt.id = ct.livestock_type_id
     LEFT JOIN livestock_product_types c ON c.livestock_product_id = ct.id
     ${whereSql}
-    GROUP BY ct.id, ct.name, ct.code, ct.is_active, ct.created_at, ct.updated_at
+    GROUP BY ct.id, ct.livestock_type_id, lt.name, ct.name, ct.code, ct.is_active, ct.created_at, ct.updated_at
   `;
 
   if (all) {
@@ -62,19 +65,22 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const name = String(body.name ?? "").trim();
+  const livestockTypeId = body.livestock_type_id ? Number(body.livestock_type_id) : null;
   const isActive = normalizeStatus(body.is_active ?? body.status ?? true);
 
-  if (!name) return fail("Livestock Product name is required", 422);
+  if (!name) return fail("Livestock name is required", 422);
+  if (livestockTypeId && !(await query<any[]>("SELECT id FROM livestock_types WHERE id=? AND is_active=1", [livestockTypeId])).length) return fail("Selected Livestock Type does not exist or is inactive", 422);
 
   const duplicateRows = await query<any[]>("SELECT id FROM livestock_products WHERE LOWER(name) = LOWER(?) LIMIT 1", [name]);
   if (duplicateRows.length) return fail("Livestock Product name already exists", 409);
 
   const code = body.code ? String(body.code).trim() : makeCode(name);
-  const result = await execute("INSERT INTO livestock_products (name, code, is_active) VALUES (?, ?, ?)", [name, code, isActive]);
+  const result = await execute("INSERT INTO livestock_products (livestock_type_id, name, code, is_active) VALUES (?, ?, ?, ?)", [livestockTypeId, name, code, isActive]);
 
   return created(
     {
       id: result.insertId,
+      livestock_type_id: livestockTypeId,
       name,
       code,
       is_active: Boolean(isActive),

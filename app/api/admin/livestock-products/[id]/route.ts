@@ -19,6 +19,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   const rows = await query<any[]>(
     `SELECT
        ct.id,
+       ct.livestock_type_id,
+       lt.name AS livestock_type_name,
        ct.name,
        ct.code,
        ct.is_active,
@@ -26,9 +28,10 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
        ct.updated_at,
        COUNT(c.id) AS livestock_product_types_count
      FROM livestock_products ct
+     LEFT JOIN livestock_types lt ON lt.id=ct.livestock_type_id
      LEFT JOIN livestock_product_types c ON c.livestock_product_id = ct.id
      WHERE ct.id = ?
-     GROUP BY ct.id, ct.name, ct.code, ct.is_active, ct.created_at, ct.updated_at
+     GROUP BY ct.id, ct.livestock_type_id, lt.name, ct.name, ct.code, ct.is_active, ct.created_at, ct.updated_at
      LIMIT 1`,
     [id],
   );
@@ -41,6 +44,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
   const name = String(body.name ?? "").trim();
+  const livestockTypeId = body.livestock_type_id ? Number(body.livestock_type_id) : null;
   const isActive = normalizeStatus(body.is_active ?? body.status ?? true);
 
   if (!name) return fail("Livestock Product name is required", 422);
@@ -52,11 +56,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   if (duplicateRows.length) return fail("Livestock Product name already exists", 409);
 
   const code = body.code ? String(body.code).trim() : makeCode(name);
-  await execute("UPDATE livestock_products SET name = ?, code = ?, is_active = ? WHERE id = ?", [name, code, isActive, id]);
+  if (livestockTypeId && !(await query<any[]>("SELECT id FROM livestock_types WHERE id=? AND is_active=1",[livestockTypeId])).length) return fail("Selected Livestock Type does not exist or is inactive",422);
+  await execute("UPDATE livestock_products SET livestock_type_id=?, name = ?, code = ?, is_active = ? WHERE id = ?", [livestockTypeId,name, code, isActive, id]);
 
   return ok(
     {
       id: Number(id),
+      livestock_type_id: livestockTypeId,
       name,
       code,
       is_active: Boolean(isActive),

@@ -566,10 +566,9 @@ const masterDataItem: SidebarItem = {
   icon: Settings,
   children: [
     { label: "Crop Categories", href: "/dashboard/crop-categories", permission: "crops.read" },
-    { label: "Livestock Products", href: "/dashboard/livestock-products", permission: "livestock_products.read" },
-    { label: "Livestock Product Types", href: "/dashboard/livestock-product-types", permission: "livestock_product_types.read" },
-    { label: "Work Types", href: "/dashboard/work-types", permission: "work_types.read" },
-    { label: "Works", href: "/dashboard/works", permission: "works.read" },
+    { label: "Livestock", href: "/dashboard/livestock-products", permission: "livestock_products.read" },
+    { label: "Business Areas", href: "/dashboard/work-types", permission: "work_types.read" },
+    { label: "Products", href: "/dashboard/works", permission: "works.read" },
   ],
 };
 
@@ -606,8 +605,7 @@ const roleSidebars: Record<RoleKey, RoleSidebar> = {
             icon: FolderTree,
             children: [
               { label: "Crop Categories", href: "/dashboard/crop-categories", permission: "crops.read" },
-              { label: "Livestock Products", href: "/dashboard/livestock-products", permission: "livestock_products.read" },
-              { label: "Livestock Product Types", href: "/dashboard/livestock-product-types", permission: "livestock_product_types.read" },
+              { label: "Livestock", href: "/dashboard/livestock-products", permission: "livestock_products.read" },
               { label: "Work Types", href: "/dashboard/work-types", permission: "work_types.read" },
               { label: "Works", href: "/dashboard/works", permission: "works.read" },
               { label: "Planning Periods", href: "/dashboard/planning-settings", permission: "planning_settings.read", superOnly: true },
