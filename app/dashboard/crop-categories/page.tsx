@@ -1,0 +1,2 @@
+import { CategoryCrudPage } from "@/components/master-data/CategoryCrudPage";
+export default function Page(){return <CategoryCrudPage title="Crop Categories" description="Classify each crop, e.g. Wheat → Durum Wheat / Bread Wheat." endpoint="/api/admin/crop-categories" parentEndpoint="/api/admin/crops" parentKey="crop_id" parentLabel="Crop" parentNameKey="crop_name" createLabel="Add Crop Category"/>}

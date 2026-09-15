@@ -1,0 +1,2 @@
+import { CategoryCrudPage } from "@/components/master-data/CategoryCrudPage";
+export default function Page(){return <CategoryCrudPage title="Crop Type Categories" description="Classify each crop type, e.g. Cereal Crops → Small Cereal / Large Cereal." endpoint="/api/admin/crop-type-categories" parentEndpoint="/api/admin/crop-types" parentKey="crop_type_id" parentLabel="Crop Type" parentNameKey="crop_type_name" createLabel="Add Type Category"/>}
