@@ -1,102 +1,13 @@
 import { NextRequest } from "next/server";
-import { execute, query } from "@/lib/server/db";
+import { query, transaction } from "@/lib/server/db";
 import { pagination } from "@/lib/server/crud";
 import { created, fail, ok, paginated } from "@/lib/server/response";
 
-function normalizeStatus(value: unknown) {
-  return value === "inactive" || value === false || value === 0 || value === "0" ? 0 : 1;
-}
-
-function makeCode(name: string) {
-  return name
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 80);
-}
-
-export async function GET(request: NextRequest) {
-  const all = request.nextUrl.searchParams.get("all");
-  const search = request.nextUrl.searchParams.get("search")?.trim() ?? "";
-  const status = request.nextUrl.searchParams.get("status") ?? "all";
-
-  const where: string[] = [];
-  const params: unknown[] = [];
-
-  if (search) {
-    where.push("ct.name LIKE ?");
-    params.push(`%${search}%`);
-  }
-
-  if (status === "active") where.push("ct.is_active = 1");
-  if (status === "inactive") where.push("ct.is_active = 0");
-
-  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const selectSql = `
-    SELECT
-      ct.id,
-      ct.livestock_type_id,
-      ct.livestock_category_id,
-      lc.name AS livestock_category_name,
-      lt.name AS livestock_type_name,
-      ct.name,
-      ct.sex,
-      ct.code,
-      ct.is_active,
-      ct.created_at,
-      ct.updated_at,
-      COUNT(c.id) AS livestock_product_types_count
-    FROM livestock_products ct
-    LEFT JOIN livestock_types lt ON lt.id = ct.livestock_type_id
-    LEFT JOIN livestock_categories lc ON lc.id = ct.livestock_category_id
-    LEFT JOIN livestock_product_types c ON c.livestock_product_id = ct.id
-    ${whereSql}
-    GROUP BY ct.id, ct.livestock_type_id, ct.livestock_category_id, lc.name, lt.name, ct.name, ct.sex, ct.code, ct.is_active, ct.created_at, ct.updated_at
-  `;
-
-  if (all) {
-    const rows = await query<any[]>(`${selectSql} ORDER BY ct.name ASC`, params);
-    return ok(rows, "Livestock products fetched successfully");
-  }
-
-  const { page, perPage, offset } = pagination(request);
-  const countRows = await query<any[]>(`SELECT COUNT(*) AS total FROM livestock_products ct ${whereSql}`, params);
-  const rows = await query<any[]>(`${selectSql} ORDER BY ct.name ASC LIMIT ? OFFSET ?`, [...params, perPage, offset]);
-
-  return paginated(rows, page, perPage, Number(countRows[0]?.total ?? 0));
-}
-
-export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
-  const name = String(body.name ?? "").trim();
-  const livestockTypeId = body.livestock_type_id ? Number(body.livestock_type_id) : null;
-  const livestockCategoryId = body.livestock_category_id ? Number(body.livestock_category_id) : null;
-  const sex = String(body.sex ?? "").trim().toLowerCase();
-  const isActive = normalizeStatus(body.is_active ?? body.status ?? true);
-
-  if (!name) return fail("Livestock name is required", 422);
-  if (!livestockTypeId) return fail("Livestock Type is required", 422);
-  if (!livestockCategoryId) return fail("Livestock Category is required", 422);
-  if (sex !== "male" && sex !== "female") return fail("Sex must be Male or Female", 422);
-  if (!(await query<any[]>("SELECT id FROM livestock_categories WHERE id=? AND livestock_type_id=? AND is_active=1", [livestockCategoryId, livestockTypeId])).length) return fail("Selected Livestock Category does not belong to the selected Livestock Type or is inactive", 422);
-  if (livestockTypeId && !(await query<any[]>("SELECT id FROM livestock_types WHERE id=? AND is_active=1", [livestockTypeId])).length) return fail("Selected Livestock Type does not exist or is inactive", 422);
-
-  const duplicateRows = await query<any[]>("SELECT id FROM livestock_products WHERE livestock_type_id = ? AND livestock_category_id = ? AND LOWER(name) = LOWER(?) AND sex = ? LIMIT 1", [livestockTypeId, livestockCategoryId, name, sex]);
-  if (duplicateRows.length) return fail(`A ${sex} ${name} already exists in the selected Livestock Type`, 409);
-
-  const code = body.code ? String(body.code).trim() : `${makeCode(name)}_${sex.toUpperCase()}`;
-  const result = await execute("INSERT INTO livestock_products (livestock_type_id, livestock_category_id, name, sex, code, is_active) VALUES (?, ?, ?, ?, ?, ?)", [livestockTypeId, livestockCategoryId, name, sex, code, isActive]);
-
-  return created(
-    {
-      id: result.insertId,
-      livestock_type_id: livestockTypeId,
-      livestock_category_id: livestockCategoryId,
-      name,
-      sex,
-      code,
-      is_active: Boolean(isActive),
-    },
-    "Livestock Product created successfully",
-  );
-}
+const active=(v:unknown)=>v === "inactive" || v === false || v === 0 || v === "0" ? 0 : 1;
+const code=(name:string,sex:string)=>`${name.toUpperCase().replace(/[^A-Z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,70)}_${sex.toUpperCase()}`;
+const categoryIds=(body:any)=>Array.from(new Set((Array.isArray(body.category_ids)?body.category_ids:body.livestock_category_id?[body.livestock_category_id]:[]).map(Number).filter((x:number)=>Number.isInteger(x)&&x>0))) as number[];
+function shape(row:any){const ids=String(row.category_ids??"").split(",").filter(Boolean).map(Number);const names=String(row.category_names??"").split("||").filter(Boolean);return {...row,category_ids:ids,category_names:names,livestock_category_id:ids[0]??null,livestock_category_name:names[0]??null};}
+async function validateCategories(ids:number[],typeId:number){if(!ids.length)return false;const marks=ids.map(()=>"?").join(",");const rows=await query<any[]>(`SELECT id FROM livestock_categories WHERE livestock_type_id=? AND is_active=1 AND id IN (${marks})`,[typeId,...ids]);return rows.length===ids.length;}
+const select=`SELECT lp.id,lp.livestock_type_id,lt.name livestock_type_name,lp.name,lp.sex,lp.code,lp.is_active,lp.created_at,lp.updated_at,COUNT(DISTINCT lpt.id) livestock_product_types_count,GROUP_CONCAT(DISTINCT lc.id ORDER BY lc.name) category_ids,GROUP_CONCAT(DISTINCT lc.name ORDER BY lc.name SEPARATOR '||') category_names FROM livestock_products lp LEFT JOIN livestock_types lt ON lt.id=lp.livestock_type_id LEFT JOIN livestock_product_category lpc ON lpc.livestock_product_id=lp.id LEFT JOIN livestock_categories lc ON lc.id=lpc.livestock_category_id LEFT JOIN livestock_product_types lpt ON lpt.livestock_product_id=lp.id`;
+export async function GET(request:NextRequest){const all=request.nextUrl.searchParams.get("all"),search=request.nextUrl.searchParams.get("search")?.trim()??"",status=request.nextUrl.searchParams.get("status")??"all";const w:string[]=[],p:unknown[]=[];if(search){w.push("(lp.name LIKE ? OR lt.name LIKE ? OR lc.name LIKE ?)");p.push(`%${search}%`,`%${search}%`,`%${search}%`)}if(status==="active")w.push("lp.is_active=1");if(status==="inactive")w.push("lp.is_active=0");const ws=w.length?`WHERE ${w.join(" AND ")}`:"",group=" GROUP BY lp.id,lp.livestock_type_id,lt.name,lp.name,lp.sex,lp.code,lp.is_active,lp.created_at,lp.updated_at";if(all){const rows=await query<any[]>(`${select} ${ws}${group} ORDER BY lp.name`,p);return ok(rows.map(shape),"Livestock fetched successfully")}const{page,perPage,offset}=pagination(request);const cr=await query<any[]>(`SELECT COUNT(DISTINCT lp.id) total FROM livestock_products lp LEFT JOIN livestock_types lt ON lt.id=lp.livestock_type_id LEFT JOIN livestock_product_category lpc ON lpc.livestock_product_id=lp.id LEFT JOIN livestock_categories lc ON lc.id=lpc.livestock_category_id ${ws}`,p);const rows=await query<any[]>(`${select} ${ws}${group} ORDER BY lp.name LIMIT ? OFFSET ?`,[...p,perPage,offset]);return paginated(rows.map(shape),page,perPage,Number(cr[0]?.total??0));}
+export async function POST(request:NextRequest){const b=await request.json().catch(()=>({})),name=String(b.name??"").trim(),typeId=Number(b.livestock_type_id||0),sex=String(b.sex??"").toLowerCase(),ids=categoryIds(b);if(!name)return fail("Livestock name is required",422);if(!typeId)return fail("Livestock Type is required",422);if(!ids.length)return fail("Select at least one Livestock Category",422);if(!["male","female"].includes(sex))return fail("Sex must be Male or Female",422);if(!(await validateCategories(ids,typeId)))return fail("Every selected category must belong to the selected active Livestock Type",422);if((await query<any[]>("SELECT id FROM livestock_products WHERE livestock_type_id=? AND LOWER(name)=LOWER(?) AND sex=? LIMIT 1",[typeId,name,sex])).length)return fail(`A ${sex} ${name} already exists in this Livestock Type. Edit it to assign more categories.`,409);const result=await transaction(async c=>{const[r]=await c.execute<any>("INSERT INTO livestock_products (livestock_type_id,livestock_category_id,name,sex,code,is_active) VALUES (?,?,?,?,?,?)",[typeId,ids[0],name,sex,b.code?String(b.code).trim():code(name,sex),active(b.is_active??b.status??true)]);for(const id of ids)await c.execute("INSERT INTO livestock_product_category (livestock_product_id,livestock_category_id) VALUES (?,?)",[r.insertId,id]);return r;});return created({id:result.insertId,livestock_type_id:typeId,category_ids:ids,name,sex,is_active:Boolean(active(b.is_active??true))},"Livestock created successfully");}
