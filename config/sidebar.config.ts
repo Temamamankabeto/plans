@@ -565,9 +565,6 @@ const masterDataItem: SidebarItem = {
   label: "Master Data",
   icon: Settings,
   children: [
-    { label: "Crop Types", href: "/dashboard/crop-types", permission: "crop_types.read" },
-    { label: "Crop Type Categories", href: "/dashboard/crop-type-categories", permission: "crop_types.read" },
-    { label: "Crops", href: "/dashboard/crops", permission: "crops.read" },
     { label: "Crop Categories", href: "/dashboard/crop-categories", permission: "crops.read" },
     { label: "Livestock Products", href: "/dashboard/livestock-products", permission: "livestock_products.read" },
     { label: "Livestock Product Types", href: "/dashboard/livestock-product-types", permission: "livestock_product_types.read" },
@@ -608,9 +605,6 @@ const roleSidebars: Record<RoleKey, RoleSidebar> = {
             label: "Master Data",
             icon: FolderTree,
             children: [
-              { label: "Crop Types", href: "/dashboard/crop-types", permission: "crop_types.read" },
-              { label: "Crop Type Categories", href: "/dashboard/crop-type-categories", permission: "crop_types.read" },
-              { label: "Crops", href: "/dashboard/crops", permission: "crops.read" },
               { label: "Crop Categories", href: "/dashboard/crop-categories", permission: "crops.read" },
               { label: "Livestock Products", href: "/dashboard/livestock-products", permission: "livestock_products.read" },
               { label: "Livestock Product Types", href: "/dashboard/livestock-product-types", permission: "livestock_product_types.read" },

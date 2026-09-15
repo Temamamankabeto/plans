@@ -52,6 +52,7 @@ type ApiResponse<T> = {
 
 type CropForm = {
   crop_type_id: string;
+  crop_type_category_id: string;
   name: string;
   land_area_unit: string;
   productivity_unit: string;
@@ -61,6 +62,7 @@ type CropForm = {
 
 const emptyForm: CropForm = {
   crop_type_id: "",
+  crop_type_category_id: "",
   name: "",
   land_area_unit: "Ha",
   productivity_unit: "Qt/Ha",
@@ -93,6 +95,7 @@ async function apiRequest<T>(url: string, options?: RequestInit): Promise<ApiRes
 export default function CropsPage() {
   const [crops, setCrops] = useState<CropItem[]>([]);
   const [cropTypes, setCropTypes] = useState<CropTypeItem[]>([]);
+  const [typeCategories, setTypeCategories] = useState<Array<{id:number; crop_type_id:number; name:string; is_active?:boolean|number}>>([]);
   const [loading, setLoading] = useState(true);
   const [cropTypesLoading, setCropTypesLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -121,6 +124,8 @@ export default function CropsPage() {
     try {
       const list = await apiRequest<CropTypeItem[]>("/api/admin/crop-types?all=1");
       setCropTypes(list.data);
+      const categories = await apiRequest<Array<{id:number; crop_type_id:number; name:string; is_active?:boolean|number}>>("/api/admin/crop-type-categories?all=1&status=active");
+      setTypeCategories(categories.data);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to fetch crop types");
     } finally {
@@ -178,6 +183,7 @@ export default function CropsPage() {
     setSelectedCrop(crop);
     setForm({
       crop_type_id: String(crop.crop_type_id ?? ""),
+      crop_type_category_id: String(crop.crop_type_category_id ?? ""),
       name: crop.name ?? "",
       land_area_unit: crop.land_area_unit ?? "Ha",
       productivity_unit: crop.productivity_unit ?? "Qt/Ha",
@@ -199,6 +205,7 @@ export default function CropsPage() {
         method: "PUT",
         body: JSON.stringify({
           crop_type_id: crop.crop_type_id,
+          crop_type_category_id: crop.crop_type_category_id ?? null,
           name: crop.name,
           land_area_unit: crop.land_area_unit ?? "Ha",
           productivity_unit: crop.productivity_unit ?? "Qt/Ha",
@@ -427,6 +434,17 @@ export default function CropsPage() {
                         {cropType.name}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Crop Type Category</Label>
+                <Select value={form.crop_type_category_id || "none"} onValueChange={(value) => setForm((current) => ({ ...current, crop_type_category_id: value === "none" ? "" : value }))}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select type category (optional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Type Category</SelectItem>
+                    {typeCategories.filter((category) => String(category.crop_type_id) === form.crop_type_id).map((category) => <SelectItem key={category.id} value={String(category.id)}>{category.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

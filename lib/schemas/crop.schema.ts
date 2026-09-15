@@ -1,5 +1,6 @@
 export type CropInput = {
   crop_type_id?: string | number;
+  crop_type_category_id?: string | number | null;
   name?: string;
   land_area_unit?: string;
   productivity_unit?: string;
@@ -12,6 +13,7 @@ export type CropValidationResult =
       valid: true;
       data: {
         crop_type_id: number;
+        crop_type_category_id: number | null;
         name: string;
         land_area_unit: string;
         productivity_unit: string;
@@ -42,6 +44,7 @@ function validateUnit(value: string, label: string, errors: Record<string, strin
 export function validateCropInput(input: CropInput): CropValidationResult {
   const cropTypeId = Number(input.crop_type_id);
   const name = String(input.name ?? "").trim();
+  const cropTypeCategoryId = input.crop_type_category_id ? Number(input.crop_type_category_id) : null;
   const landAreaUnit = cleanUnit(input.land_area_unit, "Ha");
   const productivityUnit = cleanUnit(input.productivity_unit, "Qt/Ha");
   const productionUnit = cleanUnit(input.production_unit, "Qt");
@@ -71,6 +74,7 @@ export function validateCropInput(input: CropInput): CropValidationResult {
     valid: true,
     data: {
       crop_type_id: cropTypeId,
+      crop_type_category_id: cropTypeCategoryId,
       name,
       land_area_unit: landAreaUnit,
       productivity_unit: productivityUnit,

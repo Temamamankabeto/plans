@@ -25,6 +25,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     `SELECT
        c.id,
        c.crop_type_id,
+       c.crop_type_category_id,
        c.name,
        c.code,
        COALESCE(c.land_area_unit, 'Ha') AS land_area_unit,
@@ -33,9 +34,11 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
        c.is_active,
        c.created_at,
        c.updated_at,
-       ct.name AS crop_type_name
+       ct.name AS crop_type_name,
+       ctc.name AS crop_type_category_name
      FROM crops c
      INNER JOIN crop_types ct ON ct.id = c.crop_type_id
+     LEFT JOIN crop_type_categories ctc ON ctc.id = c.crop_type_category_id
      WHERE c.id = ?
      LIMIT 1`,
     [id],
@@ -50,6 +53,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const body = await request.json().catch(() => ({}));
   const cropTypeId = Number(body.crop_type_id);
   const name = String(body.name ?? "").trim();
+  const cropTypeCategoryId = body.crop_type_category_id ? Number(body.crop_type_category_id) : null;
   const landAreaUnit = unit(body.land_area_unit, "Ha");
   const productivityUnit = unit(body.productivity_unit, "Qt/Ha");
   const productionUnit = unit(body.production_unit, "Qt");
@@ -57,6 +61,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   if (!cropTypeId) return fail("Crop type is required", 422);
   if (!name) return fail("Crop name is required", 422);
+
+  if (cropTypeCategoryId) {
+    const categoryRows = await query<any[]>("SELECT id FROM crop_type_categories WHERE id = ? AND crop_type_id = ? LIMIT 1", [cropTypeCategoryId, cropTypeId]);
+    if (!categoryRows.length) return fail("Selected type category does not belong to the selected crop type", 422);
+  }
 
   const existingRows = await query<any[]>("SELECT id FROM crops WHERE id = ? LIMIT 1", [id]);
   if (!existingRows.length) return fail("Crop not found", 404);
@@ -72,14 +81,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
   const code = body.code ? String(body.code).trim() : makeCode(name, cropTypeId);
   await execute(
-    "UPDATE crops SET crop_type_id = ?, name = ?, code = ?, land_area_unit = ?, productivity_unit = ?, production_unit = ?, is_active = ? WHERE id = ?",
-    [cropTypeId, name, code, landAreaUnit, productivityUnit, productionUnit, isActive, id],
+    "UPDATE crops SET crop_type_id = ?, crop_type_category_id = ?, name = ?, code = ?, land_area_unit = ?, productivity_unit = ?, production_unit = ?, is_active = ? WHERE id = ?",
+    [cropTypeId, cropTypeCategoryId, name, code, landAreaUnit, productivityUnit, productionUnit, isActive, id],
   );
 
   return ok(
     {
       id: Number(id),
       crop_type_id: cropTypeId,
+      crop_type_category_id: cropTypeCategoryId,
       name,
       code,
       land_area_unit: landAreaUnit,

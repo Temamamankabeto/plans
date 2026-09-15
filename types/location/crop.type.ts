@@ -3,6 +3,8 @@ export type CropStatusFilter = "all" | "active" | "inactive";
 export type CropItem = {
   id: number;
   crop_type_id: number;
+  crop_type_category_id?: number | null;
+  crop_type_category_name?: string | null;
   crop_type_name?: string | null;
   name: string;
   code?: string | null;
@@ -17,6 +19,7 @@ export type CropItem = {
 
 export type CropPayload = {
   crop_type_id: number;
+  crop_type_category_id?: number | null;
   name: string;
   land_area_unit?: string;
   productivity_unit?: string;
@@ -27,6 +30,7 @@ export type CropPayload = {
 export type CropListParams = {
   search?: string;
   crop_type_id?: number | string;
+  crop_type_category_id?: number | string;
   status?: CropStatusFilter;
   page?: number;
   per_page?: number;

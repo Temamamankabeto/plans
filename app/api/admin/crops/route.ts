@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams.get("search")?.trim() ?? "";
   const status = request.nextUrl.searchParams.get("status") ?? "all";
   const cropTypeId = request.nextUrl.searchParams.get("crop_type_id");
+  const cropTypeCategoryId = request.nextUrl.searchParams.get("crop_type_category_id");
 
   const where: string[] = [];
   const params: unknown[] = [];
@@ -39,6 +40,11 @@ export async function GET(request: NextRequest) {
     params.push(cropTypeId);
   }
 
+  if (cropTypeCategoryId && cropTypeCategoryId !== "all") {
+    where.push("c.crop_type_category_id = ?");
+    params.push(cropTypeCategoryId);
+  }
+
   if (status === "active") where.push("c.is_active = 1");
   if (status === "inactive") where.push("c.is_active = 0");
 
@@ -47,6 +53,7 @@ export async function GET(request: NextRequest) {
     SELECT
       c.id,
       c.crop_type_id,
+      c.crop_type_category_id,
       c.name,
       c.code,
       COALESCE(c.land_area_unit, 'Ha') AS land_area_unit,
@@ -55,9 +62,11 @@ export async function GET(request: NextRequest) {
       c.is_active,
       c.created_at,
       c.updated_at,
-      ct.name AS crop_type_name
+      ct.name AS crop_type_name,
+      ctc.name AS crop_type_category_name
     FROM crops c
     INNER JOIN crop_types ct ON ct.id = c.crop_type_id
+    LEFT JOIN crop_type_categories ctc ON ctc.id = c.crop_type_category_id
     ${whereSql}
   `;
 
@@ -80,6 +89,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const cropTypeId = Number(body.crop_type_id);
   const name = String(body.name ?? "").trim();
+  const cropTypeCategoryId = body.crop_type_category_id ? Number(body.crop_type_category_id) : null;
   const landAreaUnit = unit(body.land_area_unit, "Ha");
   const productivityUnit = unit(body.productivity_unit, "Qt/Ha");
   const productionUnit = unit(body.production_unit, "Qt");
@@ -87,6 +97,11 @@ export async function POST(request: NextRequest) {
 
   if (!cropTypeId) return fail("Crop type is required", 422);
   if (!name) return fail("Crop name is required", 422);
+
+  if (cropTypeCategoryId) {
+    const categoryRows = await query<any[]>("SELECT id FROM crop_type_categories WHERE id = ? AND crop_type_id = ? LIMIT 1", [cropTypeCategoryId, cropTypeId]);
+    if (!categoryRows.length) return fail("Selected type category does not belong to the selected crop type", 422);
+  }
 
   const cropTypeRows = await query<any[]>("SELECT id FROM crop_types WHERE id = ? LIMIT 1", [cropTypeId]);
   if (!cropTypeRows.length) return fail("Selected crop type does not exist", 422);
@@ -99,14 +114,15 @@ export async function POST(request: NextRequest) {
 
   const code = body.code ? String(body.code).trim() : makeCode(name, cropTypeId);
   const result = await execute(
-    "INSERT INTO crops (crop_type_id, name, code, land_area_unit, productivity_unit, production_unit, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [cropTypeId, name, code, landAreaUnit, productivityUnit, productionUnit, isActive],
+    "INSERT INTO crops (crop_type_id, crop_type_category_id, name, code, land_area_unit, productivity_unit, production_unit, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [cropTypeId, cropTypeCategoryId, name, code, landAreaUnit, productivityUnit, productionUnit, isActive],
   );
 
   return created(
     {
       id: result.insertId,
       crop_type_id: cropTypeId,
+      crop_type_category_id: cropTypeCategoryId,
       name,
       code,
       land_area_unit: landAreaUnit,
