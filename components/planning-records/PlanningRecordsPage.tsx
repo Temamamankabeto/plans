@@ -594,9 +594,11 @@ export function PlanningRecordsPage() {
   const canCreateAnnualPlan = accessScope.canCreateAnnualPlan && canUseCurrentModule;
   const canDivideMonthlyPlan = accessScope.canDivideMonthlyPlan && canUseCurrentModule;
   const canUpdateAchievement = accessScope.canUpdateAchievement && canUseCurrentModule;
-  const fiscalYearOptions = settings?.fiscal_year
-    ? [settings.fiscal_year]
-    : getFiscalYears(getCurrentEthiopianFiscalYear());
+  const fiscalYearOptions = settings?.fiscal_years?.length
+    ? settings.fiscal_years
+    : settings?.fiscal_year
+      ? [settings.fiscal_year]
+      : getFiscalYears(getCurrentEthiopianFiscalYear());
   const availableCropTypes = useMemo(() => {
     if (accessScope.module === "none" || accessScope.module === "livestock") return [];
     if (!accessScope.cropTypeNames.length) return cropTypes;

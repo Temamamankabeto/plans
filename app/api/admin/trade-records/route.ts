@@ -113,7 +113,7 @@ export async function POST(request:NextRequest) {
   if(periodType==="monthly"&&(!annualPlanId||!month)) return fail("Annual plan and month are required for monthly plan",422);
 
   const settings=await getPlanningSettings();
-  if(!fiscalYearAllowed(settings,fiscalYear)) return fail(`Trade planning entry is allowed only for Ethiopian fiscal year ${settings.fiscal_year}`,422);
+  if(!fiscalYearAllowed(settings,fiscalYear)) return fail(`Trade planning entry is allowed only for configured Ethiopian fiscal years`,422);
   if(!isSuperAdmin(auth.roles)&&!entryAllowed(settings,periodType,false))
     return fail(`${periodType==="annual"?"Annual":"Monthly"} plan entry is currently closed by Super Admin`,403);
 

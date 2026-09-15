@@ -30,7 +30,7 @@ type TradeRecord = {
   directorate_name?: string; team_name?: string; status: string; review_comment?: string | null;
 };
 type Access = { canCreate: boolean; canUpdate: boolean; canApprove: boolean; canReport: boolean; groups: string[] };
-type PlanningSettings = { fiscal_year: string; annual_plan_open: boolean | number; monthly_plan_open: boolean | number; monthly_achievement_open: boolean | number };
+type PlanningSettings = { fiscal_year: string; fiscal_years?: string[]; annual_plan_open: boolean | number; monthly_plan_open: boolean | number; monthly_achievement_open: boolean | number };
 
 const emptyForm = {
   fiscal_year: "2018", month: "Meskerem", commodity_group: "", commodity: "", unit: "Unit",
@@ -71,7 +71,7 @@ export default function TradeRecordsPage() {
 
   const annualPlans = records.filter((r) => r.period_type === "annual");
   const monthlyPlans = records.filter((r) => r.period_type === "monthly");
-  const fiscalYears = settings?.fiscal_year ? [settings.fiscal_year] : FISCAL_YEARS;
+  const fiscalYears = settings?.fiscal_years?.length ? settings.fiscal_years : settings?.fiscal_year ? [settings.fiscal_year] : FISCAL_YEARS;
   const canCreateAnnualPlan = access.canCreate && businessAreas.length > 0 && Number(settings?.annual_plan_open ?? 1) === 1;
   const selectedArea = businessAreas.find((x) => x.name === form.commodity_group);
   const productOptions = useMemo(
@@ -96,7 +96,7 @@ export default function TradeRecordsPage() {
       setSettings(nextSettings);
       setBusinessAreas(areasResponse.data?.data ?? []);
       setProducts(productsResponse.data?.data ?? []);
-      setForm((c) => ({ ...c, fiscal_year: String(nextSettings?.fiscal_year ?? c.fiscal_year) }));
+      setForm((c) => ({ ...c, fiscal_year: String(nextSettings?.fiscal_years?.[0] ?? nextSettings?.fiscal_year ?? c.fiscal_year) }));
     } catch (error: any) {
       toast.error(error.message || "Failed to load Trade records");
     } finally { setLoading(false); }

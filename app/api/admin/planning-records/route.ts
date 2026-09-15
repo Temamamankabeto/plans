@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
 
   const settings = await getPlanningSettings();
   if (!fiscalYearAllowed(settings, data.fiscal_year)) {
-    return fail(`Planning entry is allowed only for Ethiopian fiscal year ${settings.fiscal_year}`, 422);
+    return fail(`Planning entry is allowed only for configured Ethiopian fiscal years`, 422);
   }
   if (!isSuperAdmin(auth.roles) && !entryAllowed(settings, data.period_type, data.period_type === 'monthly' && (Number(data.achievement_land_area ?? 0) > 0 || Number(data.achievement_population ?? 0) > 0 || Number(data.achievement_productivity ?? 0) > 0 || Number(data.achievement_production ?? 0) > 0))) {
     return fail(`${data.record_type === "plan" ? "Plan" : "Achievement"} entry is currently closed by Super Admin`, 403);

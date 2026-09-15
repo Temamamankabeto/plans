@@ -62,7 +62,7 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
 
     const settings=await getPlanningSettings();
     if(!fiscalYearAllowed(settings,record.fiscal_year))
-      return fail(`Trade achievement entry is allowed only for Ethiopian fiscal year ${settings.fiscal_year}`,422);
+      return fail(`Trade achievement entry is allowed only for configured Ethiopian fiscal years`,422);
     if(!isSuperAdmin(auth.roles)&&!entryAllowed(settings,"monthly",true))
       return fail("Monthly achievement entry is currently closed by Super Admin",403);
 

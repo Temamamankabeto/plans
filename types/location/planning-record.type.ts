@@ -115,6 +115,7 @@ export interface PlanningRecordFormInput {
 export interface PlanningSettings {
   id: number;
   fiscal_year: string;
+  fiscal_years?: string[];
   annual_plan_open: boolean | number;
   annual_achievement_open: boolean | number;
   monthly_plan_open: boolean | number;

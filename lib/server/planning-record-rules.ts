@@ -26,8 +26,21 @@ export function entryAllowed(settings: any, periodType: string, hasAchievementVa
   return Number(settings.monthly_plan_open) === 1;
 }
 
+export function planningFiscalYears(settings: any): string[] {
+  const raw = settings?.fiscal_years;
+  if (Array.isArray(raw)) return raw.map(String).map((year) => year.trim()).filter(Boolean);
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map(String).map((year) => year.trim()).filter(Boolean);
+    } catch {}
+  }
+  const legacy = String(settings?.fiscal_year ?? "").trim();
+  return legacy ? [legacy] : [];
+}
+
 export function fiscalYearAllowed(settings: any, fiscalYear: unknown) {
-  return String(fiscalYear ?? "").trim() === String(settings?.fiscal_year ?? "").trim();
+  return planningFiscalYears(settings).includes(String(fiscalYear ?? "").trim());
 }
 
 function identityWhere(data: PlanningRecordFormInput, officeId: unknown, directorateId: unknown, teamId: unknown) {
