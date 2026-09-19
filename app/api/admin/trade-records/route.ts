@@ -20,9 +20,10 @@ async function getUserContext(request: NextRequest) {
   const auth = await getAuthUser(request);
   if (!auth?.id) return { auth:null, user:null };
   const rows = await query<any[]>(
-    `SELECT u.*, o.name AS office_name, d.name AS directorate_name, t.name AS team_name
+    `SELECT u.*, o.name AS office_name, dp.name AS department_name, d.name AS directorate_name, t.name AS team_name
      FROM users u
      LEFT JOIN offices o ON o.id=u.office_id
+     LEFT JOIN departments dp ON dp.id=u.department_id
      LEFT JOIN directorates d ON d.id=u.directorate_id
      LEFT JOIN teams t ON t.id=u.team_id
      WHERE u.id=? LIMIT 1`, [auth.id],
@@ -136,12 +137,6 @@ export async function POST(request:NextRequest) {
   const scopeError=assertAllowedGroup(access,businessArea);
   if(scopeError) return fail(scopeError,403);
 
-  const products=await query<any[]>(
-    `SELECT w.id FROM works w INNER JOIN work_types wt ON wt.id=w.work_type_id
-     WHERE w.is_active=1 AND wt.is_active=1 AND LOWER(wt.name)=LOWER(?) AND LOWER(w.name)=LOWER(?) LIMIT 1`,
-    [businessArea,product],
-  );
-  if(!products[0]) return fail("The selected Product does not belong to the selected active Business Area",422);
 
   if(periodType==="annual"){
     const duplicate=await query<any[]>(

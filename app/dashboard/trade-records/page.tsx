@@ -72,7 +72,7 @@ export default function TradeRecordsPage() {
   const annualPlans = records.filter((r) => r.period_type === "annual");
   const monthlyPlans = records.filter((r) => r.period_type === "monthly");
   const fiscalYears = settings?.fiscal_years?.length ? settings.fiscal_years : settings?.fiscal_year ? [settings.fiscal_year] : FISCAL_YEARS;
-  const canCreateAnnualPlan = access.canCreate && businessAreas.length > 0 && Number(settings?.annual_plan_open ?? 1) === 1;
+  const canCreateAnnualPlan = access.canCreate && access.groups.length > 0 && Number(settings?.annual_plan_open ?? 1) === 1;
   const selectedArea = businessAreas.find((x) => x.name === form.commodity_group);
   const productOptions = useMemo(
     () => products.filter((x) => Number(x.work_type_id) === Number(selectedArea?.id)),
@@ -104,19 +104,16 @@ export default function TradeRecordsPage() {
   useEffect(() => { load(); }, []);
 
   function openAnnual() {
-    const firstArea = businessAreas[0];
-    const firstProduct = products.find((x) => Number(x.work_type_id) === Number(firstArea?.id));
+    const firstGroup = access.groups[0] ?? "";
     setForm((c) => ({
-      ...c, commodity_group:firstArea?.name ?? "", commodity:firstProduct?.name ?? "",
+      ...c, commodity_group:firstGroup, commodity:"",
       value_type:"price", plan_product:"0", plan_price:"0", plan_income:"0",
     }));
     setAnnualOpen(true);
   }
 
   function updateBusinessArea(value: string) {
-    const area = businessAreas.find((x) => x.name === value);
-    const firstProduct = products.find((x) => Number(x.work_type_id) === Number(area?.id));
-    setForm((c) => ({ ...c, commodity_group:value, commodity:firstProduct?.name ?? "" }));
+    setForm((c) => ({ ...c, commodity_group:value, commodity:"" }));
   }
 
   async function saveAnnual(event: FormEvent) {
@@ -187,8 +184,8 @@ export default function TradeRecordsPage() {
   return <div className="space-y-6">
     <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Trade Value Chain Plans</h1>
-        <p className="text-muted-foreground">Business area → product → quantity → price/cost → revenue/expense planning and achievement.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Trade Office Plan & Achievement</h1>
+        <p className="text-muted-foreground">Your form and data are automatically limited to your assigned Trade Team or Directorate.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" onClick={load} disabled={loading}><RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh</Button>
@@ -201,7 +198,7 @@ export default function TradeRecordsPage() {
       <h2 className="mb-4 text-lg font-semibold">Annual Plans</h2>
       <div className="overflow-x-auto"><Table>
         <TableHeader><TableRow>
-          <TableHead>Fiscal Year</TableHead><TableHead>Business Area</TableHead><TableHead>Product</TableHead>
+          <TableHead>Fiscal Year</TableHead><TableHead>Trade Group</TableHead><TableHead>Commodity</TableHead>
           <TableHead>Directorate</TableHead><TableHead>Team</TableHead><TableHead>Quantity</TableHead>
           <TableHead>Value Type</TableHead><TableHead>Value</TableHead><TableHead>Revenue / Expense</TableHead>
           <TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
@@ -230,7 +227,7 @@ export default function TradeRecordsPage() {
       <h2 className="mb-4 text-lg font-semibold">Monthly Plans and Achievements</h2>
       <div className="overflow-x-auto"><Table>
         <TableHeader><TableRow>
-          <TableHead>Month</TableHead><TableHead>Business Area</TableHead><TableHead>Product</TableHead>
+          <TableHead>Month</TableHead><TableHead>Trade Group</TableHead><TableHead>Commodity</TableHead>
           <TableHead>Plan Quantity</TableHead><TableHead>Plan Revenue/Expense</TableHead>
           <TableHead>Achievement Quantity</TableHead><TableHead>Achievement Revenue/Expense</TableHead>
           <TableHead>Status</TableHead><TableHead className="text-right">Actions</TableHead>
@@ -263,10 +260,10 @@ export default function TradeRecordsPage() {
               {fiscalYears.map((y)=><SelectItem key={y} value={y}>{y}</SelectItem>)}
             </SelectContent></Select></Field>
 
-          <Field label="Business Area"><Select value={form.commodity_group} onValueChange={updateBusinessArea}>
+          <Field label="Trade Group"><Select value={form.commodity_group} onValueChange={updateBusinessArea}>
             <SelectTrigger><SelectValue placeholder="Select business area" /></SelectTrigger>
             <SelectContent className="z-[100] max-h-64 overflow-y-auto bg-white">
-              {businessAreas.map((x)=><SelectItem key={x.id} value={x.name}>{x.name}</SelectItem>)}
+              {access.groups.map((name)=><SelectItem key={name} value={name}>{name}</SelectItem>)}
             </SelectContent></Select></Field>
 
           <Field label="Product"><Select value={form.commodity} onValueChange={(v)=>setForm({...form,commodity:v})}>
@@ -303,7 +300,7 @@ export default function TradeRecordsPage() {
             <SelectTrigger><SelectValue /></SelectTrigger><SelectContent className="z-[100] max-h-64 bg-white">
               {ETHIOPIAN_MONTHS.map((m)=><SelectItem key={m} value={m}>{m}</SelectItem>)}
             </SelectContent></Select></Field>
-          <Field label="Business Area / Product"><Input value={`${form.commodity_group} - ${form.commodity}`} readOnly /></Field>
+          <Field label="Trade Group / Product"><Input value={`${form.commodity_group} - ${form.commodity}`} readOnly /></Field>
           <NumberField label="Monthly Quantity" value={form.plan_product} onChange={(v)=>setForm({...form,plan_product:v})} />
           <Field label="Price / Cost"><Input value={valueTypeLabel(form.value_type)} readOnly /></Field>
           <NumberField label="Value" value={form.plan_price} onChange={(v)=>setForm({...form,plan_price:v})} />
@@ -338,7 +335,7 @@ export default function TradeRecordsPage() {
     <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
       <DialogContent className="bg-white"><DialogHeader><DialogTitle>Review Trade Record</DialogTitle></DialogHeader>
         <div className="space-y-4">
-          <div className="rounded-lg border p-3 text-sm"><b>Business Area:</b> {selected?.commodity_group}<br/><b>Product:</b> {selected?.commodity}<br/>{selected?.directorate_name} / {selected?.team_name || "Directorate"}</div>
+          <div className="rounded-lg border p-3 text-sm"><b>Trade Group:</b> {selected?.commodity_group}<br/><b>Product:</b> {selected?.commodity}<br/>{selected?.directorate_name} / {selected?.team_name || "Directorate"}</div>
           <Textarea value={comment} onChange={(e)=>setComment(e.target.value)} placeholder="Write comment..." />
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={()=>setReviewOpen(false)}>Cancel</Button>

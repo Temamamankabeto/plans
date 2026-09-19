@@ -10,8 +10,9 @@ async function getUserContext(request:NextRequest) {
   const auth=await getAuthUser(request);
   if(!auth?.id) return {auth:null,user:null};
   const rows=await query<any[]>(
-    `SELECT u.*,o.name AS office_name,d.name AS directorate_name,t.name AS team_name
+    `SELECT u.*,o.name AS office_name,dp.name AS department_name,d.name AS directorate_name,t.name AS team_name
      FROM users u LEFT JOIN offices o ON o.id=u.office_id
+     LEFT JOIN departments dp ON dp.id=u.department_id
      LEFT JOIN directorates d ON d.id=u.directorate_id LEFT JOIN teams t ON t.id=u.team_id
      WHERE u.id=? LIMIT 1`,[auth.id],
   );
@@ -33,6 +34,8 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
 
   if(["approve","comment","return"].includes(action)){
     if(!access.canApprove) return fail("You do not have permission to review Trade records",403);
+    if(!access.reportAllTrade && user.directorate_id && Number(record.directorate_id)!==Number(user.directorate_id))
+      return fail("This Trade record is outside your Directorate",403);
     const status=action==="approve"?"approved":action==="return"?"returned":"commented";
     await transaction(async(connection)=>{
       await connection.execute(
@@ -57,6 +60,8 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
 
   if(action==="achievement"){
     if(!access.canUpdate) return fail("You do not have permission to update Trade achievements",403);
+    if(!access.reportAllTrade && user.team_id && Number(record.team_id)!==Number(user.team_id))
+      return fail("This Trade record is outside your Team",403);
     if(record.period_type!=="monthly") return fail("Achievement is entered only against monthly plans",422);
     if(record.status==="approved") return fail("Approved records are locked and cannot be edited",422);
 
