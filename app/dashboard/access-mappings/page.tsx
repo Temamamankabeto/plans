@@ -43,6 +43,10 @@ export default function AccessMappingsPage(){
   const [open,setOpen]=useState(false);
   const [editingId,setEditingId]=useState<number|null>(null);
   const [form,setForm]=useState<AccessMappingPayload>(empty);
+  const [officeFilter,setOfficeFilter]=useState("all");
+  const [departmentFilter,setDepartmentFilter]=useState("all");
+  const [directorateFilter,setDirectorateFilter]=useState("all");
+  const [teamFilter,setTeamFilter]=useState("all");
   const mappings=useAccessMappingsQuery();
   const roles=useUserRolesLiteQuery();
   const organizations=useAccessOrganizationOptionsQuery();
@@ -66,6 +70,26 @@ export default function AccessMappingsPage(){
     organizationLevel==="directorate"?form.directorate_id:
     organizationLevel==="department"?form.department_id:form.office_id;
 
+  const filteredDepartments=(organizations.data?.departments??[]).filter(o=>officeFilter==="all"||String(o.office_id)===officeFilter);
+  const filteredDirectorates=(organizations.data?.directorates??[]).filter(o=>
+    (officeFilter==="all"||String(o.office_id)===officeFilter) &&
+    (departmentFilter==="all"||String(o.department_id)===departmentFilter)
+  );
+  const filteredTeams=(organizations.data?.teams??[]).filter(o=>
+    (officeFilter==="all"||String(o.office_id)===officeFilter) &&
+    (departmentFilter==="all"||String(o.department_id)===departmentFilter) &&
+    (directorateFilter==="all"||String(o.directorate_id)===directorateFilter)
+  );
+  const filteredMappings=(mappings.data??[]).filter(m=>
+    (officeFilter==="all"||String(m.office_id)===officeFilter) &&
+    (departmentFilter==="all"||String(m.department_id)===departmentFilter) &&
+    (directorateFilter==="all"||String(m.directorate_id)===directorateFilter) &&
+    (teamFilter==="all"||String(m.team_id)===teamFilter)
+  );
+  function changeOffice(v:string){setOfficeFilter(v);setDepartmentFilter("all");setDirectorateFilter("all");setTeamFilter("all");}
+  function changeDepartment(v:string){setDepartmentFilter(v);setDirectorateFilter("all");setTeamFilter("all");}
+  function changeDirectorate(v:string){setDirectorateFilter(v);setTeamFilter("all");}
+  function clearFilters(){setOfficeFilter("all");setDepartmentFilter("all");setDirectorateFilter("all");setTeamFilter("all");}
   const title=useMemo(()=>editingId?"Edit Role Access":"Create Role Access",[editingId]);
 
   function close(){setOpen(false);setEditingId(null);setForm(empty);}
@@ -108,12 +132,22 @@ export default function AccessMappingsPage(){
       <div><h1 className="text-2xl font-bold">Access Mapping</h1><p className="text-sm text-muted-foreground">Assign a role to its organization, module and allowed Crop/Livestock scopes.</p></div>
       <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4"/>New Mapping</Button>
     </div>
+    <div className="rounded-lg border bg-card p-4">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <Field label="Office"><Select value={officeFilter} onValueChange={changeOffice}><SelectTrigger><SelectValue placeholder="All offices"/></SelectTrigger><SelectContent><SelectItem value="all">All Offices</SelectItem>{(organizations.data?.offices??[]).map(o=><SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Department"><Select value={departmentFilter} onValueChange={changeDepartment} disabled={officeFilter==="all"}><SelectTrigger><SelectValue placeholder="All departments"/></SelectTrigger><SelectContent><SelectItem value="all">All Departments</SelectItem>{filteredDepartments.map(o=><SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Directorate"><Select value={directorateFilter} onValueChange={changeDirectorate} disabled={officeFilter==="all"}><SelectTrigger><SelectValue placeholder="All directorates"/></SelectTrigger><SelectContent><SelectItem value="all">All Directorates</SelectItem>{filteredDirectorates.map(o=><SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Team"><Select value={teamFilter} onValueChange={setTeamFilter} disabled={directorateFilter==="all"}><SelectTrigger><SelectValue placeholder="All teams"/></SelectTrigger><SelectContent><SelectItem value="all">All Teams</SelectItem>{filteredTeams.map(o=><SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>)}</SelectContent></Select></Field>
+        <div className="flex items-end"><Button type="button" variant="outline" className="w-full" onClick={clearFilters}>Clear Filters</Button></div>
+      </div>
+    </div>
+
     <div className="overflow-hidden rounded-lg border bg-card">
       <Table><TableHeader><TableRow><TableHead>Role</TableHead><TableHead>Organization</TableHead><TableHead>Module</TableHead><TableHead>Allowed Scope</TableHead><TableHead>Permissions</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
       <TableBody>{mappings.isLoading?<TableRow><TableCell colSpan={6} className="py-8 text-center"><Loader2 className="mr-2 inline h-4 w-4 animate-spin"/>Loading...</TableCell></TableRow>:
       mappings.isError?<TableRow><TableCell colSpan={6} className="py-8 text-center text-destructive">{mappings.error instanceof Error ? mappings.error.message : "Failed to load access mappings"}</TableCell></TableRow>:
-      !(mappings.data??[]).length?<TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">No access mappings found.</TableCell></TableRow>:
-      (mappings.data??[]).map(m=><TableRow key={m.id}>
+      !filteredMappings.length?<TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">{(mappings.data??[]).length ? "No access mappings match the selected filters." : "No access mappings found."}</TableCell></TableRow>:
+      filteredMappings.map(m=><TableRow key={m.id}>
         <TableCell className="font-medium">{m.role_name}</TableCell><TableCell>{organizationName(m)}</TableCell><TableCell className="capitalize">{m.module}</TableCell>
         <TableCell><div className="flex max-w-xl flex-wrap gap-1">{m.scope_type==="all"?<span>All</span>:(m.scope_values??[]).map(v=><span key={v} className="rounded-full bg-muted px-2 py-1 text-xs">{v}</span>)}</div></TableCell>
         <TableCell className="text-xs text-muted-foreground">{[
