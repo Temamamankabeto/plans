@@ -205,5 +205,7 @@ module.exports = async function seed(connection) {
     await connection.execute(`DELETE FROM user_roles WHERE user_id = ?`, [userId]);
     await connection.execute(`INSERT IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)`, [userId, roleId]);
   }
+
+  
   
 };
