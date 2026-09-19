@@ -5,6 +5,7 @@ import { created, fail, ok } from "@/lib/server/response";
 import { applyTradeReadScope, assertAllowedGroup, getTradeAccess } from "@/lib/server/trade-access";
 import { entryAllowed, fiscalYearAllowed, getPlanningSettings, isSuperAdmin } from "@/lib/server/planning-record-rules";
 
+import { getUserAccessMappings } from "@/lib/server/dynamic-access";
 const selectSql = `
   SELECT tr.*, o.name AS office_name, d.name AS directorate_name, t.name AS team_name,
          creator.name AS created_by_name, approver.name AS approved_by_name
@@ -99,6 +100,8 @@ export async function POST(request:NextRequest) {
   const periodType=String(body.period_type ?? "annual");
   let businessArea=String(body.commodity_group ?? "").trim();
   let product=String(body.commodity ?? "").trim();
+  let scopeType=String(body.scope_type ?? "").trim();
+  let scopeValue=String(body.scope_value ?? "").trim();
   const fiscalYear=String(body.fiscal_year ?? "").trim();
   const month=body.month?String(body.month).trim():null;
   const stage=String(body.stage ?? "Value Chain").trim();
@@ -109,7 +112,7 @@ export async function POST(request:NextRequest) {
   const total=calculatedAmount(quantity,value);
   const annualPlanId=body.annual_plan_id?Number(body.annual_plan_id):null;
 
-  if(!fiscalYear||!businessArea||!product) return fail("Fiscal year, Business Area, and Product are required",422);
+  if(!fiscalYear||!businessArea||!scopeType||!scopeValue||!product) return fail("Fiscal year, Market Type, assigned Crop/Livestock Type, and Crop/Livestock are required",422);
   if(!["annual","monthly"].includes(periodType)) return fail("Invalid period type",422);
   if(periodType==="monthly"&&(!annualPlanId||!month)) return fail("Annual plan and month are required for monthly plan",422);
 
@@ -125,6 +128,8 @@ export async function POST(request:NextRequest) {
     if(annual.status!=="approved") return fail("Monthly plan can be created only after annual plan is approved",422);
     businessArea=String(annual.commodity_group);
     product=String(annual.commodity);
+    scopeType=String(annual.scope_type ?? scopeType);
+    scopeValue=String(annual.scope_value ?? scopeValue);
     valueType=normalizeValueType(annual.value_type);
 
     const duplicate=await query<any[]>("SELECT id FROM trade_records WHERE annual_plan_id=? AND period_type='monthly' AND month=? LIMIT 1",[annualPlanId,month]);
@@ -134,9 +139,31 @@ export async function POST(request:NextRequest) {
       return fail("Monthly quantity total cannot exceed Annual Plan quantity",422);
   }
 
-  const scopeError=assertAllowedGroup(access,businessArea);
-  if(scopeError) return fail(scopeError,403);
+  const mappings=await getUserAccessMappings(Number(auth.id));
+  const expectedModule=scopeType==="livestock_type" ? "livestock" : "crop";
+  const allowedScope=mappings.some((m:any)=>
+    (m.module===expectedModule || m.module==="all" || m.module==="trade") &&
+    m.scope_type===scopeType &&
+    String(m.scope_value ?? "").toLowerCase()===scopeValue.toLowerCase()
+  );
+  if(!isSuperAdmin(auth.roles)&&!allowedScope)
+    return fail("The selected Crop/Livestock Type is not assigned to your role and organization",403);
 
+  if(scopeType==="crop_type"){
+    const rows=await query<any[]>(
+      `SELECT c.id FROM crops c INNER JOIN crop_types ct ON ct.id=c.crop_type_id
+       WHERE c.is_active=1 AND ct.is_active=1 AND LOWER(ct.name)=LOWER(?) AND LOWER(c.name)=LOWER(?) LIMIT 1`,
+      [scopeValue,product]
+    );
+    if(!rows[0]) return fail("The selected Crop does not belong to the assigned Crop Type",422);
+  } else if(scopeType==="livestock_type"){
+    const rows=await query<any[]>(
+      `SELECT lp.id FROM livestock_products lp INNER JOIN livestock_types lt ON lt.id=lp.livestock_type_id
+       WHERE lp.is_active=1 AND lt.is_active=1 AND LOWER(lt.name)=LOWER(?) AND LOWER(lp.name)=LOWER(?) LIMIT 1`,
+      [scopeValue,product]
+    );
+    if(!rows[0]) return fail("The selected Livestock does not belong to the assigned Livestock Type",422);
+  } else return fail("Invalid assigned scope type",422);
 
   if(periodType==="annual"){
     const duplicate=await query<any[]>(
@@ -151,12 +178,12 @@ export async function POST(request:NextRequest) {
     const [saved]:any=await connection.execute(
       `INSERT INTO trade_records (
         annual_plan_id,office_id,directorate_id,team_id,fiscal_year,month,period_type,
-        commodity_group,commodity,stage,unit,value_type,plan_product,plan_price,plan_income,
+        commodity_group,scope_type,scope_value,commodity,stage,unit,value_type,plan_product,plan_price,plan_income,
         employment_male_plan,employment_female_plan,status,created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'submitted',?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'submitted',?)`,
       [
         annualPlanId,user.office_id,user.directorate_id,user.team_id ?? null,fiscalYear,month,periodType,
-        businessArea,product,stage,unit,valueType,quantity,value,total,
+        businessArea,scopeType,scopeValue,product,stage,unit,valueType,quantity,value,total,
         Number(body.employment_male_plan ?? 0),Number(body.employment_female_plan ?? 0),auth.id,
       ],
     );
