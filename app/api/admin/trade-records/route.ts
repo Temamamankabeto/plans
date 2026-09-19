@@ -142,7 +142,7 @@ export async function POST(request:NextRequest) {
   const mappings=await getUserAccessMappings(Number(auth.id));
   const expectedModule=scopeType==="livestock_type" ? "livestock" : "crop";
   const allowedScope=mappings.some((m:any)=>
-    (m.module===expectedModule || m.module==="all" || m.module==="trade") &&
+    String(m.module ?? "").trim().toLowerCase()===expectedModule &&
     m.scope_type===scopeType &&
     String(m.scope_value ?? "").toLowerCase()===scopeValue.toLowerCase()
   );

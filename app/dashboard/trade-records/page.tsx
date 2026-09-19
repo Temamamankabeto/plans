@@ -121,7 +121,21 @@ export default function TradeRecordsPage() {
         api.get("/admin/trade-records/access"),
       ]);
       setRecords(response.data.data ?? []);
-      setAccess(accessResponse.data?.data ?? response.data.meta?.access ?? { canCreate:false, canUpdate:false, canApprove:false, canReport:false, groups:[] });
+      const nextAccess = accessResponse.data?.data ?? response.data.meta?.access ?? { canCreate:false, canUpdate:false, canApprove:false, canReport:false, groups:[] };
+      setAccess(nextAccess);
+      const nextModules=(nextAccess.modules ?? []).filter((m:string)=>m==="crop"||m==="livestock");
+      const nextModule=nextModules[0];
+      const nextScopeType: "crop_type"|"livestock_type"|undefined =
+        nextModule==="livestock" ? "livestock_type" : nextModule==="crop" ? "crop_type" : undefined;
+      const nextAllowed=nextScopeType==="livestock_type" ? (nextAccess.livestockTypes ?? []) : (nextAccess.cropTypes ?? []);
+      if(nextScopeType){
+        setForm((current)=>({
+          ...current,
+          scope_type:nextScopeType,
+          scope_value:nextAllowed.includes(current.scope_value) ? current.scope_value : (nextAllowed[0] ?? ""),
+          commodity:nextAllowed.includes(current.scope_value) ? current.commodity : "",
+        }));
+      }
       const nextSettings = settingsResponse.data?.data as PlanningSettings;
       setSettings(nextSettings);
       setBusinessAreas(areasResponse.data?.data ?? []);
@@ -303,9 +317,31 @@ export default function TradeRecordsPage() {
             </SelectContent></Select></Field>
 
           <Field label="Module">
-            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
-              {form.scope_type==="livestock_type" ? "Livestock" : "Crop"}
-            </div>
+            {assignedModules.length > 1 ? (
+              <Select
+                value={form.scope_type==="livestock_type" ? "livestock" : "crop"}
+                onValueChange={(module)=>{
+                  const nextType: "crop_type"|"livestock_type" = module==="livestock" ? "livestock_type" : "crop_type";
+                  const nextAllowed = nextType==="crop_type" ? assignedCropTypes : assignedLivestockTypes;
+                  setForm((current)=>({
+                    ...current,
+                    scope_type:nextType,
+                    scope_value:nextAllowed[0] ?? "",
+                    commodity:"",
+                  }));
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select assigned module" /></SelectTrigger>
+                <SelectContent className="z-[100] bg-white">
+                  {assignedModules.includes("crop") && <SelectItem value="crop">Crop</SelectItem>}
+                  {assignedModules.includes("livestock") && <SelectItem value="livestock">Livestock</SelectItem>}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
+                {assignedModules[0]==="livestock" ? "Livestock" : "Crop"}
+              </div>
+            )}
           </Field>
 
           <Field label="Allowed Types">

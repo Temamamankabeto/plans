@@ -17,10 +17,10 @@ export async function GET(request: NextRequest) {
   const scoped=mappings.filter((m:any)=>["crop","livestock","trade","all"].includes(normalizeModule(m.module)));
   const modules=[...new Set(scoped.map((m:any)=>normalizeModule(m.module)).filter((m:string)=>m==="crop"||m==="livestock"))];
   const cropTypes=[...new Set(scoped
-    .filter((m:any)=>(normalizeModule(m.module)==="crop"||normalizeModule(m.module)==="all"||normalizeModule(m.module)==="trade") && m.scope_type==="crop_type" && m.scope_value)
+    .filter((m:any)=>normalizeModule(m.module)==="crop" && m.scope_type==="crop_type" && m.scope_value)
     .map((m:any)=>String(m.scope_value)))];
   const livestockTypes=[...new Set(scoped
-    .filter((m:any)=>(normalizeModule(m.module)==="livestock"||normalizeModule(m.module)==="all"||normalizeModule(m.module)==="trade") && ["livestock_type","livestock_product"].includes(m.scope_type) && m.scope_value)
+    .filter((m:any)=>normalizeModule(m.module)==="livestock" && m.scope_type==="livestock_type" && m.scope_value)
     .map((m:any)=>String(m.scope_value)))];
 
   const can=(field:string)=>scoped.some((m:any)=>Number(m[field]??0)===1);
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     canReport:can("can_view_report"),
     groups:[...cropTypes,...livestockTypes],
     modules,
+    defaultModule:modules[0] ?? null,
     cropTypes,
     livestockTypes,
     organization:{office_id:user.office_id,department_id:user.department_id,directorate_id:user.directorate_id,team_id:user.team_id},

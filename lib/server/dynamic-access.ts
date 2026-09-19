@@ -21,8 +21,15 @@ export type DynamicAccessMapping = {
 };
 
 export async function getUserAccessMappings(userId: number): Promise<DynamicAccessMapping[]> {
-  return query<any[]>(
-    `SELECT oam.*, r.name AS role_name, s.scope_value
+  const rows = await query<any[]>(
+    `SELECT oam.*, r.name AS role_name, s.scope_value,
+            CASE
+              WHEN oam.team_id IS NOT NULL THEN 4
+              WHEN oam.directorate_id IS NOT NULL THEN 3
+              WHEN oam.department_id IS NOT NULL THEN 2
+              WHEN oam.office_id IS NOT NULL THEN 1
+              ELSE 0
+            END AS organization_specificity
      FROM organization_access_mappings oam
      INNER JOIN user_roles ur ON ur.role_id=oam.role_id AND ur.user_id=?
      INNER JOIN roles r ON r.id=oam.role_id
@@ -33,13 +40,22 @@ export async function getUserAccessMappings(userId: number): Promise<DynamicAcce
        AND (oam.department_id IS NULL OR oam.department_id=u.department_id)
        AND (oam.directorate_id IS NULL OR oam.directorate_id=u.directorate_id)
        AND (oam.team_id IS NULL OR oam.team_id=u.team_id)
-     ORDER BY
-       (oam.team_id IS NOT NULL) DESC,
-       (oam.directorate_id IS NOT NULL) DESC,
-       (oam.department_id IS NOT NULL) DESC,
-       oam.id, s.scope_value`,
+     ORDER BY organization_specificity DESC, oam.id, s.scope_value`,
     [userId],
   );
+
+  // A generic role mapping must never leak scopes into a more-specific Team/Directorate mapping.
+  // Resolve specificity independently for each module so a user may legitimately have Crop and Livestock.
+  const bestByModule = new Map<string, number>();
+  for (const row of rows) {
+    const module = String(row.module ?? "").trim().toLowerCase();
+    const score = Number(row.organization_specificity ?? 0);
+    bestByModule.set(module, Math.max(bestByModule.get(module) ?? -1, score));
+  }
+  return rows.filter((row) => {
+    const module = String(row.module ?? "").trim().toLowerCase();
+    return Number(row.organization_specificity ?? 0) === bestByModule.get(module);
+  });
 }
 
 export function hasDynamicAction(
