@@ -1,8 +1,34 @@
 export type AccessModule = "crop" | "livestock" | "trade" | "job" | "agribusiness" | "mechanization" | "all";
 export type AccessScopeType = "crop_type" | "livestock_type" | "trade_group" | "all";
+export type AccessOrganizationLevel = "office" | "department" | "directorate" | "team";
+
+export type OrganizationOption = {
+  id: number;
+  name: string;
+  label: string;
+  office_id: number | null;
+  department_id: number | null;
+  directorate_id: number | null;
+  team_id: number | null;
+};
+
+export type AccessOrganizationOptions = {
+  offices: OrganizationOption[];
+  departments: OrganizationOption[];
+  directorates: OrganizationOption[];
+  teams: OrganizationOption[];
+};
 
 export type OrganizationAccessMapping = {
   id: number;
+  office_id: number | null;
+  department_id: number | null;
+  directorate_id: number | null;
+  team_id: number | null;
+  office_name?: string | null;
+  department_name?: string | null;
+  directorate_name?: string | null;
+  team_name?: string | null;
   role_id: number;
   module: AccessModule;
   scope_type: AccessScopeType;
@@ -20,6 +46,10 @@ export type OrganizationAccessMapping = {
 
 export type AccessMappingPayload = {
   role_id: number;
+  office_id: number | null;
+  department_id: number | null;
+  directorate_id: number | null;
+  team_id: number | null;
   module: AccessModule;
   scope_type: AccessScopeType;
   scope_values: string[];

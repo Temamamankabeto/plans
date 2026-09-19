@@ -7,6 +7,12 @@ const key = ["organization-access-mappings"] as const;
 export function useAccessMappingsQuery() {
   return useQuery({ queryKey: key, queryFn: () => accessMappingService.list() });
 }
+export function useAccessOrganizationOptionsQuery() {
+  return useQuery({
+    queryKey: ["organization-access-mapping-organization-options"],
+    queryFn: () => accessMappingService.organizationOptions(),
+  });
+}
 export function useAccessScopeOptionsQuery(scopeType: AccessScopeType) {
   return useQuery({
     queryKey: ["organization-access-mapping-scope-options", scopeType],

@@ -24,11 +24,20 @@ export async function getUserAccessMappings(userId: number): Promise<DynamicAcce
   return query<any[]>(
     `SELECT oam.*, r.name AS role_name, s.scope_value
      FROM organization_access_mappings oam
-     INNER JOIN user_roles ur ON ur.role_id = oam.role_id AND ur.user_id = ?
-     INNER JOIN roles r ON r.id = oam.role_id
-     LEFT JOIN organization_access_mapping_scopes s ON s.access_mapping_id = oam.id
-     WHERE oam.is_active = 1
-     ORDER BY r.name, oam.module, oam.id, s.scope_value`,
+     INNER JOIN user_roles ur ON ur.role_id=oam.role_id AND ur.user_id=?
+     INNER JOIN roles r ON r.id=oam.role_id
+     INNER JOIN users u ON u.id=ur.user_id
+     LEFT JOIN organization_access_mapping_scopes s ON s.access_mapping_id=oam.id
+     WHERE oam.is_active=1
+       AND (oam.office_id IS NULL OR oam.office_id=u.office_id)
+       AND (oam.department_id IS NULL OR oam.department_id=u.department_id)
+       AND (oam.directorate_id IS NULL OR oam.directorate_id=u.directorate_id)
+       AND (oam.team_id IS NULL OR oam.team_id=u.team_id)
+     ORDER BY
+       (oam.team_id IS NOT NULL) DESC,
+       (oam.directorate_id IS NOT NULL) DESC,
+       (oam.department_id IS NOT NULL) DESC,
+       oam.id, s.scope_value`,
     [userId],
   );
 }
@@ -46,7 +55,6 @@ export function hasDynamicAction(
     comment: "can_comment",
     approve: "can_approve",
   }[action] as keyof DynamicAccessMapping;
-
   return mappings.some(
     (mapping) =>
       (!module || mapping.module === module || mapping.module === "all") &&
