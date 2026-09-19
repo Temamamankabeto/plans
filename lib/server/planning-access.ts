@@ -106,7 +106,7 @@ function dynamicPlanningScope(user: any, roles: string[] = []): PlanningAccessSc
     .filter((mapping: any) => ["crop", "all"].includes(String(mapping?.module ?? "").toLowerCase()) && String(mapping?.scope_type ?? "").toLowerCase() === "crop_type" && mapping?.scope_value)
     .map((mapping: any) => String(mapping.scope_value)))];
   const livestockProductNames = [...new Set<string>(active
-    .filter((mapping: any) => ["livestock", "all"].includes(String(mapping?.module ?? "").toLowerCase()) && String(mapping?.scope_type ?? "").toLowerCase() === "livestock_product" && mapping?.scope_value)
+    .filter((mapping: any) => ["livestock", "all"].includes(String(mapping?.module ?? "").toLowerCase()) && ["livestock_type", "livestock_product"].includes(String(mapping?.scope_type ?? "").toLowerCase()) && mapping?.scope_value)
     .map((mapping: any) => String(mapping.scope_value)))];
   // Planning entry starts at Team Leader. Directors can also create their own
   // plans and achievements. Experts are explicitly report-only even when an

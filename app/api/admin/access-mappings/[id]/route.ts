@@ -1,180 +1,103 @@
 import { NextRequest } from "next/server";
-
 import { getAuthUser } from "@/lib/server/auth";
 import { query, transaction } from "@/lib/server/db";
 import { fail, ok } from "@/lib/server/response";
 
-const selectSql = `SELECT oam.*, o.name office_name, d.name directorate_name, dp.name department_name, t.name team_name, r.name role_name
-FROM organization_access_mappings oam
-INNER JOIN offices o ON o.id=oam.office_id
-LEFT JOIN directorates d ON d.id=oam.directorate_id
-LEFT JOIN departments dp ON dp.id=oam.department_id
-LEFT JOIN teams t ON t.id=oam.team_id
-INNER JOIN roles r ON r.id=oam.role_id`;
-
-function flag(value: unknown) {
-  return value === true || value === 1 || value === "1" ? 1 : 0;
-}
-
-function nullableId(value: unknown) {
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : null;
-}
 const allowedModules = new Set(["crop", "livestock", "trade", "job", "agribusiness", "mechanization", "all"]);
-const allowedScopeTypes = new Set(["all", "crop_type", "livestock_product", "trade_group"]);
+const allowedScopeTypes = new Set(["all", "crop_type", "livestock_type", "trade_group"]);
 
-async function canonicalScopeValue(scopeType: string, value: string | null) {
-  if (scopeType === "all") return { value: null, error: null };
-  if (!value) return { value: null, error: "Scope value is required for the selected scope type" };
-  const table = scopeType === "crop_type" ? "crop_types" : scopeType === "livestock_product" ? "livestock_products" : null;
-  if (!table) return { value, error: null };
-  const numericId = Number(value);
-  const rows = await query<any[]>(
-    `SELECT name FROM ${table} WHERE ${Number.isInteger(numericId) && numericId > 0 ? "id = ?" : "LOWER(name) = LOWER(?)"} AND is_active = 1 LIMIT 1`,
-    [Number.isInteger(numericId) && numericId > 0 ? numericId : value],
-  );
-  return rows[0]?.name
-    ? { value: String(rows[0].name), error: null }
-    : { value: null, error: `Selected ${scopeType.replaceAll("_", " ")} does not exist or is inactive` };
+function flag(value: unknown) { return value === true || value === 1 || value === "1" ? 1 : 0; }
+function nullableId(value: unknown) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : null; }
+
+async function canonicalScopeValues(scopeType: string, input: unknown) {
+  if (scopeType === "all") return { values: [] as string[], error: null as string | null };
+  const raw = Array.isArray(input) ? input : [];
+  const requested = [...new Set(raw.map((v) => String(v).trim()).filter(Boolean))];
+  if (!requested.length) return { values: [], error: "Select at least one scope value" };
+
+  const table = scopeType === "crop_type" ? "crop_types" : scopeType === "livestock_type" ? "livestock_types" : null;
+  if (!table) return { values: requested, error: null };
+
+  const placeholders = requested.map(() => "?").join(",");
+  const rows = await query<any[]>(`SELECT name FROM ${table} WHERE name IN (${placeholders}) AND is_active=1`, requested);
+  const values = rows.map((row) => String(row.name));
+  if (values.length !== requested.length) return { values: [], error: "One or more selected scope values do not exist or are inactive" };
+  return { values, error: null };
 }
+
+const selectOneSql = `
+SELECT oam.*, r.name AS role_name,
+       COALESCE(JSON_ARRAYAGG(s.scope_value), JSON_ARRAY()) AS scope_values
+FROM organization_access_mappings oam
+INNER JOIN roles r ON r.id=oam.role_id
+LEFT JOIN organization_access_mapping_scopes s ON s.access_mapping_id=oam.id
+`;
 
 async function authorize(request: NextRequest) {
   const auth = await getAuthUser(request);
-  if (!auth || !auth.roles?.includes("Super Admin")) return null;
-  return auth;
-}
-
-async function validateOrganizationScope(
-  officeId: number,
-  directorateId: number | null,
-  departmentId: number | null,
-  teamId: number | null,
-) {
-  const officeRows = await query<any[]>("SELECT id FROM offices WHERE id=? LIMIT 1", [officeId]);
-  if (!officeRows.length) return "Selected office does not exist";
-
-  if ((departmentId || teamId) && !directorateId) return "Select a directorate before selecting a department or team";
-
-  if (departmentId) {
-    const rows = await query<any[]>("SELECT id FROM departments WHERE id=? AND office_id=? AND is_active=1 LIMIT 1", [departmentId, officeId]);
-    if (!rows.length) return "Selected department does not belong to selected office";
-  }
-
-  if (directorateId) {
-    if (!departmentId) return "Select department before selecting directorate";
-    const rows = await query<any[]>("SELECT id FROM directorates WHERE id=? AND office_id=? AND department_id=? LIMIT 1", [directorateId, officeId, departmentId]);
-    if (!rows.length) return "Selected directorate does not belong to selected department";
-  }
-
-  if (teamId) {
-    const rows = await query<any[]>("SELECT id FROM teams WHERE id=? AND directorate_id=? LIMIT 1", [teamId, directorateId]);
-    if (!rows.length) return "Selected team does not belong to selected directorate";
-  }
-
-  return null;
+  return auth?.roles?.includes("Super Admin") ? auth : null;
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorize(request);
-  if (!auth) return fail("Forbidden", 403);
-
+  if (!await authorize(request)) return fail("Forbidden", 403);
   const { id: rawId } = await params;
   const id = Number(rawId);
   if (!Number.isFinite(id) || id <= 0) return fail("Invalid access mapping id", 422);
 
   const existing = await query<any[]>("SELECT id FROM organization_access_mappings WHERE id=? LIMIT 1", [id]);
-  if (!existing[0]) return fail("Access mapping not found", 404);
+  if (!existing.length) return fail("Access mapping not found", 404);
 
   const body = await request.json().catch(() => ({}));
-  const officeId = nullableId(body.office_id);
-  const directorateId = nullableId(body.directorate_id);
-  const departmentId = nullableId(body.department_id);
-  const teamId = nullableId(body.team_id);
   const roleId = nullableId(body.role_id);
   const module = String(body.module ?? "").trim();
   const scopeType = String(body.scope_type ?? "all").trim();
-  const rawScopeValue = scopeType === "all" ? null : String(body.scope_value ?? "").trim() || null;
 
-  if (!officeId || !roleId || !module) {
-    return fail("Office, role and module are required", 422);
-  }
+  if (!roleId || !module) return fail("Role and module are required", 422);
   if (!allowedModules.has(module)) return fail("Invalid access module", 422);
   if (!allowedScopeTypes.has(scopeType)) return fail("Invalid scope type", 422);
-  const resolvedScope = await canonicalScopeValue(scopeType, rawScopeValue);
-  if (resolvedScope.error) return fail(resolvedScope.error, 422);
-  const scopeValue = resolvedScope.value;
 
-  const roleRows = await query<any[]>("SELECT id,name FROM roles WHERE id=? LIMIT 1", [roleId]);
-  if (!roleRows.length) return fail("Selected role does not exist", 422);
-  if (["Manager", "Adviser"].includes(String(roleRows[0].name)) && !departmentId) {
-    return fail("Department is required for Manager and Adviser access mappings", 422);
-  }
-
-  const scopeError = await validateOrganizationScope(officeId, directorateId, departmentId, teamId);
-  if (scopeError) return fail(scopeError, 422);
+  const resolved = await canonicalScopeValues(scopeType, body.scope_values);
+  if (resolved.error) return fail(resolved.error, 422);
 
   const duplicate = await query<any[]>(
-    `SELECT id FROM organization_access_mappings
-     WHERE id<>? AND office_id=? AND directorate_id <=> ? AND department_id <=> ? AND team_id <=> ?
-       AND role_id=? AND module=? AND scope_type=? AND scope_value <=> ?
-     LIMIT 1`,
-    [id, officeId, directorateId, departmentId, teamId, roleId, module, scopeType, scopeValue],
+    "SELECT id FROM organization_access_mappings WHERE id<>? AND role_id=? AND module=? AND is_active=1 LIMIT 1",
+    [id, roleId, module],
   );
-  if (duplicate.length) return fail("An identical access mapping already exists", 409);
+  if (duplicate.length) return fail("This role already has an active mapping for the selected module", 409);
 
-  try {
-    await transaction(async (connection) => {
+  await transaction(async (connection) => {
+    await connection.execute(
+      `UPDATE organization_access_mappings SET
+       office_id=NULL,directorate_id=NULL,department_id=NULL,team_id=NULL,
+       role_id=?,module=?,scope_type=?,scope_value=NULL,
+       can_create_annual_plan=?,can_divide_monthly_plan=?,can_update_achievement=?,
+       can_view_report=?,can_comment=?,can_approve=?,is_active=? WHERE id=?`,
+      [roleId,module,scopeType,flag(body.can_create_annual_plan),flag(body.can_divide_monthly_plan),
+       flag(body.can_update_achievement),flag(body.can_view_report),flag(body.can_comment),flag(body.can_approve),
+       body.is_active === false ? 0 : 1,id],
+    );
+    await connection.execute("DELETE FROM organization_access_mapping_scopes WHERE access_mapping_id=?", [id]);
+    for (const value of resolved.values) {
       await connection.execute(
-        `UPDATE organization_access_mappings SET
-          office_id=?, directorate_id=?, department_id=?, team_id=?, role_id=?, module=?, scope_type=?, scope_value=?,
-          can_create_annual_plan=?, can_divide_monthly_plan=?, can_update_achievement=?,
-          can_view_report=?, can_comment=?, can_approve=?, is_active=?
-        WHERE id=?`,
-        [
-          officeId,
-          directorateId,
-          departmentId,
-          teamId,
-          roleId,
-          module,
-          scopeType,
-          scopeValue,
-          flag(body.can_create_annual_plan),
-          flag(body.can_divide_monthly_plan),
-          flag(body.can_update_achievement),
-          flag(body.can_view_report),
-          flag(body.can_comment),
-          flag(body.can_approve),
-          body.is_active === false ? 0 : 1,
-          id,
-        ],
+        "INSERT INTO organization_access_mapping_scopes (access_mapping_id,scope_value) VALUES (?,?)",
+        [id,value],
       );
-    });
-  } catch (error: any) {
-    if (error?.code === "ER_DUP_ENTRY") {
-      return fail("An identical access mapping already exists", 409);
     }
-    throw error;
-  }
+  });
 
-  const rows = await query<any[]>(`${selectSql} WHERE oam.id=? LIMIT 1`, [id]);
-  return ok(rows[0], "Access mapping updated successfully");
+  const rows = await query<any[]>(`${selectOneSql} WHERE oam.id=? GROUP BY oam.id,r.name LIMIT 1`, [id]);
+  const row = rows[0];
+  if (row) row.scope_values = typeof row.scope_values === "string" ? JSON.parse(row.scope_values) : (row.scope_values ?? []).filter(Boolean);
+  return ok(row, "Access mapping updated successfully");
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await authorize(request);
-  if (!auth) return fail("Forbidden", 403);
-
+  if (!await authorize(request)) return fail("Forbidden", 403);
   const { id: rawId } = await params;
   const id = Number(rawId);
   if (!Number.isFinite(id) || id <= 0) return fail("Invalid access mapping id", 422);
-
-  const existing = await query<any[]>("SELECT id FROM organization_access_mappings WHERE id=? LIMIT 1", [id]);
-  if (!existing[0]) return fail("Access mapping not found", 404);
-
   await transaction(async (connection) => {
     await connection.execute("DELETE FROM organization_access_mappings WHERE id=?", [id]);
   });
-
   return ok(null, "Access mapping deleted successfully");
 }
