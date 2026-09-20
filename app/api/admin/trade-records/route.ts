@@ -147,9 +147,11 @@ export async function POST(request:NextRequest) {
 
   const mappings=await getUserAccessMappings(Number(auth.id));
   const expectedModule=accessModule || (scopeType==="livestock_type" ? "livestock" : "crop");
-  if(!["crop","livestock","livestock_product"].includes(expectedModule)) return fail("Invalid assigned module",422);
+  if(!["crop","crop_product","livestock","livestock_product"].includes(expectedModule)) return fail("Invalid assigned module",422);
   if(expectedModule==="crop" && scopeType!=="crop_type") return fail("Crop module requires a Crop Type",422);
-  if((expectedModule==="livestock"||expectedModule==="livestock_product") && scopeType!=="livestock_type") return fail("Livestock modules require a Livestock Type",422);
+  if(expectedModule==="crop_product" && scopeType!=="crop_product") return fail("Crop Product module requires an allowed Crop Product",422);
+  if(expectedModule==="livestock" && scopeType!=="livestock_type") return fail("Livestock module requires a Livestock Type",422);
+  if(expectedModule==="livestock_product" && scopeType!=="livestock_product") return fail("Livestock Product module requires an allowed Livestock Product",422);
   const allowedScope=mappings.some((m:any)=>
     String(m.module ?? "").trim().toLowerCase()===expectedModule &&
     m.scope_type===scopeType &&
@@ -172,16 +174,14 @@ export async function POST(request:NextRequest) {
       [scopeValue,product]
     );
     if(!rows[0]) return fail("The selected Livestock does not belong to the assigned Livestock Type",422);
-  } else if(scopeType==="livestock_type" && expectedModule==="livestock_product"){
-    const rows=await query<any[]>(
-      `SELECT w.id FROM works w
-       INNER JOIN livestock_products lp ON lp.id=w.livestock_product_id
-       INNER JOIN livestock_types lt ON lt.id=lp.livestock_type_id
-       WHERE w.is_active=1 AND w.source_type='livestock' AND lp.is_active=1 AND lt.is_active=1
-         AND LOWER(lt.name)=LOWER(?) AND LOWER(w.name)=LOWER(?) LIMIT 1`,
-      [scopeValue,product]
-    );
-    if(!rows[0]) return fail("The selected Livestock Product does not belong to the assigned Livestock Type",422);
+  } else if(scopeType==="crop_product" && expectedModule==="crop_product"){
+    if(scopeValue.toLowerCase()!==product.toLowerCase()) return fail("The selected Crop Product is not assigned to your access mapping",403);
+    const rows=await query<any[]>(`SELECT id FROM works WHERE is_active=1 AND source_type='crop' AND LOWER(name)=LOWER(?) LIMIT 1`,[product]);
+    if(!rows[0]) return fail("Invalid Crop Product",422);
+  } else if(scopeType==="livestock_product" && expectedModule==="livestock_product"){
+    if(scopeValue.toLowerCase()!==product.toLowerCase()) return fail("The selected Livestock Product is not assigned to your access mapping",403);
+    const rows=await query<any[]>(`SELECT id FROM works WHERE is_active=1 AND source_type='livestock' AND LOWER(name)=LOWER(?) LIMIT 1`,[product]);
+    if(!rows[0]) return fail("Invalid Livestock Product",422);
   } else return fail("Invalid assigned scope type",422);
 
   if(periodType==="annual"){

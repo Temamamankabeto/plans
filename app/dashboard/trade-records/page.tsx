@@ -17,11 +17,11 @@ const ETHIOPIAN_MONTHS = ["Meskerem","Tikimt","Hidar","Tahsas","Tir","Yekatit","
 const FISCAL_YEARS = ["2018","2019","2020","2021"];
 type ValueType = "price" | "cost";
 type BusinessAreaOption = { id: number; name: string };
-type ProductOption = { id: number; name: string; work_type_id: number; source_type?: "crop" | "livestock"; livestock_product_id?: number | null };
+type ProductOption = { id: number; name: string; work_type_id: number; source_type?: "crop" | "livestock"; crop_id?: number | null; livestock_product_id?: number | null; crop_ids?: string | null; livestock_ids?: string | null };
 
 type TradeRecord = {
   id: number; annual_plan_id?: number | null; fiscal_year: string; month?: string | null;
-  period_type: "annual" | "monthly"; commodity_group: string; access_module?: "crop" | "livestock" | "livestock_product"; commodity: string; scope_type?: "crop_type" | "livestock_type"; scope_value?: string; unit: string;
+  period_type: "annual" | "monthly"; commodity_group: string; access_module?: "crop" | "crop_product" | "livestock" | "livestock_product"; commodity: string; scope_type?: "crop_type" | "crop_product" | "livestock_type" | "livestock_product"; scope_value?: string; unit: string;
   value_type?: ValueType | null;
   plan_product: number; plan_price: number; plan_income: number;
   achievement_product: number; achievement_price: number; achievement_income: number;
@@ -29,7 +29,7 @@ type TradeRecord = {
   employment_male_achievement: number; employment_female_achievement: number;
   directorate_name?: string; team_name?: string; status: string; review_comment?: string | null; created_by?: number;
 };
-type Access = { canCreate: boolean; canUpdate: boolean; canApprove: boolean; canReport: boolean; groups: string[]; modules?: string[]; cropTypes?: string[]; livestockTypes?: string[]; livestockProductTypes?: string[] };
+type Access = { canCreate: boolean; canUpdate: boolean; canApprove: boolean; canReport: boolean; groups: string[]; modules?: string[]; cropTypes?: string[]; livestockTypes?: string[]; cropProducts?: string[]; livestockProducts?: string[]; livestockProductTypes?: string[] };
 type CropType = { id:number; name:string };
 type Crop = { id:number; name:string; crop_type_id?:number|null; crop_type_name?:string|null };
 type LivestockType = { id:number; name:string };
@@ -77,6 +77,7 @@ export default function TradeRecordsPage() {
   const [selected, setSelected] = useState<TradeRecord | null>(null);
   const [comment, setComment] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const [productParent, setProductParent] = useState("");
 
   const annualPlans = records.filter((r) => r.period_type === "annual");
   const monthlyPlans = records.filter((r) => r.period_type === "monthly");
@@ -96,24 +97,34 @@ export default function TradeRecordsPage() {
     return()=>{active=false};
   },[]);
 
-  const assignedModules=(access.modules ?? []).filter((m)=>m==="crop"||m==="livestock"||m==="livestock_product");
+  const assignedModules=(access.modules ?? []).filter((m)=>m==="crop"||m==="crop_product"||m==="livestock"||m==="livestock_product");
   const assignedCropTypes=access.cropTypes ?? [];
   const assignedLivestockTypes=access.livestockTypes ?? [];
-  const assignedLivestockProductTypes=access.livestockProductTypes ?? [];
+  const assignedCropProducts=access.cropProducts ?? [];
+  const assignedLivestockProducts=access.livestockProducts ?? access.livestockProductTypes ?? [];
   const hasAssignedCrops=assignedModules.includes("crop") && assignedCropTypes.length>0;
   const hasAssignedLivestock=assignedModules.includes("livestock") && assignedLivestockTypes.length>0;
+  const isCropProductMarket=form.access_module==="crop_product";
   const isLivestockMarket=form.access_module==="livestock";
   const isLivestockProductMarket=form.access_module==="livestock_product";
+  const isProductMarket=isCropProductMarket||isLivestockProductMarket;
   const isLivestockFamily=isLivestockMarket||isLivestockProductMarket;
   const selectedCropType=cropTypes.find(x=>x.name===form.scope_value);
   const selectedLivestockType=livestockTypes.find(x=>x.name===form.scope_value);
   const cropOptions=crops.filter(x=>selectedCropType && (Number(x.crop_type_id)===Number(selectedCropType.id) || x.crop_type_name===selectedCropType.name));
   const livestockOptions=livestock.filter(x=>selectedLivestockType && (Number(x.livestock_type_id)===Number(selectedLivestockType.id) || x.livestock_type_name===selectedLivestockType.name));
-  const livestockProductOptions=products.filter((product)=>{
-    if(product.source_type!=="livestock" || !product.livestock_product_id || !selectedLivestockType) return false;
-    const sourceLivestock=livestock.find((item)=>Number(item.id)===Number(product.livestock_product_id));
-    return Boolean(sourceLivestock && (Number(sourceLivestock.livestock_type_id)===Number(selectedLivestockType.id) || sourceLivestock.livestock_type_name===selectedLivestockType.name));
-  });
+  const selectedProductCrop=crops.find(x=>x.name===productParent);
+  const selectedProductLivestock=livestock.find(x=>x.name===productParent);
+  const relationIds=(value?:string|null,single?:number|null)=>String(value??single??"").split(",").map(Number).filter(Boolean);
+  const cropProductOptions=products.filter((product)=>
+    product.source_type==="crop" && assignedCropProducts.includes(product.name) && selectedProductCrop && relationIds(product.crop_ids,product.crop_id).includes(Number(selectedProductCrop.id))
+  );
+  const livestockProductOptions=products.filter((product)=>
+    product.source_type==="livestock" && assignedLivestockProducts.includes(product.name) && selectedProductLivestock && relationIds(product.livestock_ids,product.livestock_product_id).includes(Number(selectedProductLivestock.id))
+  );
+  const productParentOptions=isCropProductMarket
+    ? crops.filter(c=>products.some(p=>p.source_type==="crop"&&assignedCropProducts.includes(p.name)&&relationIds(p.crop_ids,p.crop_id).includes(Number(c.id))))
+    : livestock.filter(l=>products.some(p=>p.source_type==="livestock"&&assignedLivestockProducts.includes(p.name)&&relationIds(p.livestock_ids,p.livestock_product_id).includes(Number(l.id))));
 
   // Button visibility must follow the exact logged-in user's resolved access mapping.
   // Do not hide it because master data has not loaded yet; openAnnual validates
@@ -151,9 +162,10 @@ export default function TradeRecordsPage() {
     setEditingAnnual(null);
     const firstMarketType=businessAreas[0]?.name ?? "";
     const firstModule=assignedModules.includes("crop") ? "crop" : assignedModules[0] ?? (hasAssignedCrops ? "crop" : "livestock");
-    const firstScopeType: "crop_type" | "livestock_type" = firstModule==="crop" ? "crop_type" : "livestock_type";
-    const firstAllowedTypes=firstModule==="crop" ? assignedCropTypes : firstModule==="livestock_product" ? assignedLivestockProductTypes : assignedLivestockTypes;
+    const firstScopeType = firstModule==="crop" ? "crop_type" : firstModule==="crop_product" ? "crop_product" : firstModule==="livestock_product" ? "livestock_product" : "livestock_type";
+    const firstAllowedTypes=firstModule==="crop" ? assignedCropTypes : firstModule==="crop_product" ? assignedCropProducts : firstModule==="livestock_product" ? assignedLivestockProducts : assignedLivestockTypes;
     const firstScopeValue=firstAllowedTypes[0] ?? "";
+    setProductParent("");
     setForm((c) => ({
       ...c, commodity_group:firstMarketType, access_module:firstModule, scope_type:firstScopeType, scope_value:firstScopeValue, commodity:"",
       value_type:"price", plan_product:"0", plan_price:"0", plan_income:"0",
@@ -165,16 +177,23 @@ export default function TradeRecordsPage() {
     setForm((c) => ({ ...c, commodity_group:value }));
   }
   function updateModule(value:string) {
-    const scopeType: "crop_type" | "livestock_type" = value==="crop" ? "crop_type" : "livestock_type";
-    const allowed=value==="crop" ? assignedCropTypes : value==="livestock_product" ? assignedLivestockProductTypes : assignedLivestockTypes;
+    const scopeType=value==="crop" ? "crop_type" : value==="crop_product" ? "crop_product" : value==="livestock_product" ? "livestock_product" : "livestock_type";
+    const allowed=value==="crop" ? assignedCropTypes : value==="crop_product" ? assignedCropProducts : value==="livestock_product" ? assignedLivestockProducts : assignedLivestockTypes;
+    setProductParent("");
     setForm((c)=>({...c,access_module:value,scope_type:scopeType,scope_value:allowed[0]??"",commodity:""}));
   }
   function updateAssignedType(value:string) {
     setForm((c)=>({...c,scope_value:value,commodity:""}));
   }
+  function updateProductParent(value:string) { setProductParent(value); setForm(c=>({...c,commodity:""})); }
+  function updateProduct(value:string) { setForm(c=>({...c,commodity:value,scope_value:isProductMarket?value:c.scope_value})); }
 
   function openEditAnnual(row: TradeRecord) {
     setEditingAnnual(row);
+    const editProduct=products.find(p=>p.name===row.commodity);
+    if(row.access_module==="crop_product") { const ids=relationIds(editProduct?.crop_ids,editProduct?.crop_id); setProductParent(crops.find(c=>ids.includes(Number(c.id)))?.name??""); }
+    else if(row.access_module==="livestock_product") { const ids=relationIds(editProduct?.livestock_ids,editProduct?.livestock_product_id); setProductParent(livestock.find(l=>ids.includes(Number(l.id)))?.name??""); }
+    else setProductParent("");
     setForm((c) => ({
       ...c,
       fiscal_year: row.fiscal_year,
@@ -197,7 +216,7 @@ export default function TradeRecordsPage() {
   async function saveAnnual(event: FormEvent) {
     event.preventDefault();
     try {
-      const payload = { ...form, period_type:"annual", plan_income:planCalculated };
+      const payload = { ...form, source_parent: isProductMarket ? productParent : undefined, period_type:"annual", plan_income:planCalculated };
       if (editingAnnual) {
         await api.patch(`/admin/trade-records/${editingAnnual.id}`, { action:"update_plan", ...payload });
         toast.success("Annual plan updated successfully");
@@ -352,30 +371,45 @@ export default function TradeRecordsPage() {
 
           <Field label="Module">
             {assignedModules.length<=1 ? <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
-              {form.access_module==="livestock_product" ? "Livestock Product" : form.access_module==="livestock" ? "Livestock" : "Crop"}
+              {form.access_module==="livestock_product" ? "Livestock Product" : form.access_module==="crop_product" ? "Crop Product" : form.access_module==="livestock" ? "Livestock" : "Crop"}
             </div> : <Select value={form.access_module} onValueChange={updateModule}>
               <SelectTrigger><SelectValue placeholder="Select assigned module" /></SelectTrigger>
-              <SelectContent className="z-[100] bg-white">{assignedModules.map((m)=><SelectItem key={m} value={m}>{m==="livestock_product"?"Livestock Product":m==="livestock"?"Livestock":"Crop"}</SelectItem>)}</SelectContent>
+              <SelectContent className="z-[100] bg-white">{assignedModules.map((m)=><SelectItem key={m} value={m}>{m==="livestock_product"?"Livestock Product":m==="crop_product"?"Crop Product":m==="livestock"?"Livestock":"Crop"}</SelectItem>)}</SelectContent>
             </Select>}
           </Field>
 
+          {isProductMarket ? <>
+          <Field label={isCropProductMarket ? "Crop" : "Livestock"}>
+            <Select value={productParent} onValueChange={updateProductParent}>
+              <SelectTrigger><SelectValue placeholder={isCropProductMarket ? "Select crop" : "Select livestock"} /></SelectTrigger>
+              <SelectContent className="z-[100] max-h-64 overflow-y-auto bg-white">
+                {productParentOptions.map(x=><SelectItem key={x.id} value={x.name}>{x.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label={isCropProductMarket ? "Crop Product" : "Livestock Product"}>
+            <Select value={form.commodity} onValueChange={updateProduct} disabled={!productParent}>
+              <SelectTrigger><SelectValue placeholder={productParent ? "Select product" : `Select ${isCropProductMarket ? "crop" : "livestock"} first`} /></SelectTrigger>
+              <SelectContent className="z-[100] max-h-64 overflow-y-auto bg-white">
+                {(isCropProductMarket ? cropProductOptions : livestockProductOptions).map(x=><SelectItem key={x.id} value={x.name}>{x.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          </> : <>
           <Field label="Allowed Types">
             <Select value={form.scope_value} onValueChange={updateAssignedType}>
               <SelectTrigger><SelectValue placeholder={isLivestockFamily ? "Select allowed livestock type" : "Select allowed crop type"} /></SelectTrigger>
               <SelectContent className="z-[100] max-h-64 overflow-y-auto bg-white">
-                {(form.access_module==="crop" ? assignedCropTypes : form.access_module==="livestock_product" ? assignedLivestockProductTypes : assignedLivestockTypes).length===0
-                  ? <SelectItem value="__none" disabled>No allowed types assigned</SelectItem>
-                  : (form.access_module==="crop" ? assignedCropTypes : form.access_module==="livestock_product" ? assignedLivestockProductTypes : assignedLivestockTypes)
-                      .map((name)=><SelectItem key={name} value={name}>{name}</SelectItem>)}
+                {(form.access_module==="crop" ? assignedCropTypes : assignedLivestockTypes).map(name=><SelectItem key={name} value={name}>{name}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
-
-          <Field label={isLivestockProductMarket ? "Livestock Product" : isLivestockMarket ? "Livestock" : "Crop"}><Select value={form.commodity} onValueChange={(v)=>setForm({...form,commodity:v})}>
-            <SelectTrigger><SelectValue placeholder={isLivestockProductMarket ? "Select livestock product" : isLivestockMarket ? "Select livestock" : "Select crop"} /></SelectTrigger>
+          <Field label={isLivestockMarket ? "Livestock" : "Crop"}><Select value={form.commodity} onValueChange={(v)=>setForm({...form,commodity:v})}>
+            <SelectTrigger><SelectValue placeholder={isLivestockMarket ? "Select livestock" : "Select crop"} /></SelectTrigger>
             <SelectContent className="z-[100] max-h-64 overflow-y-auto bg-white">
-              {(isLivestockProductMarket ? livestockProductOptions : isLivestockMarket ? livestockOptions : cropOptions).map((x)=><SelectItem key={x.id} value={x.name}>{x.name}</SelectItem>)}
+              {(isLivestockMarket ? livestockOptions : cropOptions).map(x=><SelectItem key={x.id} value={x.name}>{x.name}</SelectItem>)}
             </SelectContent></Select></Field>
+          </>}
 
           <NumberField label="Quantity" value={form.plan_product} onChange={(v)=>setForm({...form,plan_product:v})} />
 
