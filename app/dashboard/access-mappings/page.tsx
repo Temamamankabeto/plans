@@ -19,7 +19,7 @@ import type {
   OrganizationAccessMapping, OrganizationOption,
 } from "@/types/access-mapping/access-mapping.type";
 
-const MODULES: AccessModule[] = ["crop","livestock","livestock_product","trade","job","agribusiness","mechanization","all"];
+const MODULES: AccessModule[] = ["crop","crop_product","livestock","livestock_product","trade","job","agribusiness","mechanization","all"];
 const empty: AccessMappingPayload = {
   role_id:0,office_id:null,department_id:null,directorate_id:null,team_id:null,
   module:"crop",scope_type:"crop_type",scope_values:[],
@@ -28,7 +28,7 @@ const empty: AccessMappingPayload = {
 };
 const bool=(v:boolean|number)=>v===true||v===1;
 const scopeForModule=(m:AccessModule):AccessScopeType =>
-  m==="crop"?"crop_type":(m==="livestock"||m==="livestock_product")?"livestock_type":m==="trade"?"trade_group":"all";
+  m==="crop"?"crop_type":m==="crop_product"?"crop_product":m==="livestock"?"livestock_type":m==="livestock_product"?"livestock_product":m==="trade"?"trade_group":"all";
 function levelForRole(roleName:string):AccessOrganizationLevel {
   if(["Team Leader","Expert"].includes(roleName)) return "team";
   if(roleName==="Director") return "directorate";
@@ -164,10 +164,10 @@ export default function AccessMappingsPage(){
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Role *"><Select value={form.role_id?String(form.role_id):""} onValueChange={v=>setRole(Number(v))}><SelectTrigger><SelectValue placeholder="Select role"/></SelectTrigger><SelectContent>{(roles.data??[]).map(r=><SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>)}</SelectContent></Select></Field>
         <Field label={`${organizationLabel} *`}><Select disabled={!form.role_id||organizations.isLoading} value={selectedOrganizationId?String(selectedOrganizationId):""} onValueChange={v=>setOrganization(Number(v))}><SelectTrigger><SelectValue placeholder={form.role_id?`Select ${organizationLabel.toLowerCase()}`:"Select role first"}/></SelectTrigger><SelectContent>{organizationOptions.map(o=><SelectItem key={o.id} value={String(o.id)}>{o.label}</SelectItem>)}</SelectContent></Select></Field>
-        <Field label="Module *"><Select value={form.module} onValueChange={v=>setModule(v as AccessModule)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{MODULES.map(m=><SelectItem key={m} value={m} className="capitalize">{m==="livestock_product"?"Livestock Product":m}</SelectItem>)}</SelectContent></Select></Field>
+        <Field label="Module *"><Select value={form.module} onValueChange={v=>setModule(v as AccessModule)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{MODULES.map(m=><SelectItem key={m} value={m} className="capitalize">{m==="crop_product"?"Crop Product":m==="livestock_product"?"Livestock Product":m}</SelectItem>)}</SelectContent></Select></Field>
       </div>
 
-      {form.scope_type==="crop_type"||form.scope_type==="livestock_type"?<Field label={form.scope_type==="crop_type"?"Allowed Crop Types *":"Allowed Livestock Types *"}>
+      {["crop_type","crop_product","livestock_type","livestock_product"].includes(form.scope_type)?<Field label={form.scope_type==="crop_type"?"Allowed Crop Types *":form.scope_type==="crop_product"?"Allowed Crop Products *":form.scope_type==="livestock_type"?"Allowed Livestock Types *":"Allowed Livestock Products *"}>
         <div className="rounded-lg border p-3">
           <div className="mb-3 flex min-h-8 flex-wrap gap-2">{form.scope_values.length?form.scope_values.map(v=><button type="button" key={v} onClick={()=>toggleScope(v)} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">{v}<X className="h-3 w-3"/></button>):<span className="text-sm text-muted-foreground">Select one or more values below</span>}</div>
           <div className="grid max-h-56 gap-2 overflow-y-auto md:grid-cols-2">{(scopeOptions.data??[]).map(o=><label key={o.id} className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm"><input type="checkbox" checked={form.scope_values.includes(o.name)} onChange={()=>toggleScope(o.name)}/>{o.name}</label>)}</div>

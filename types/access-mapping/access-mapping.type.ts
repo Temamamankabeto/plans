@@ -1,5 +1,5 @@
-export type AccessModule = "crop" | "livestock" | "livestock_product" | "trade" | "job" | "agribusiness" | "mechanization" | "all";
-export type AccessScopeType = "crop_type" | "livestock_type" | "trade_group" | "all";
+export type AccessModule = "crop" | "crop_product" | "livestock" | "livestock_product" | "trade" | "job" | "agribusiness" | "mechanization" | "all";
+export type AccessScopeType = "crop_type" | "crop_product" | "livestock_type" | "livestock_product" | "trade_group" | "all";
 export type AccessOrganizationLevel = "office" | "department" | "directorate" | "team";
 
 export type OrganizationOption = {

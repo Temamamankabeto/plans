@@ -3,8 +3,8 @@ import { getAuthUser } from "@/lib/server/auth";
 import { query, transaction } from "@/lib/server/db";
 import { fail, ok } from "@/lib/server/response";
 
-const allowedModules = new Set(["crop", "livestock", "livestock_product", "trade", "job", "agribusiness", "mechanization", "all"]);
-const allowedScopeTypes = new Set(["all", "crop_type", "livestock_type", "trade_group"]);
+const allowedModules = new Set(["crop", "crop_product", "livestock", "livestock_product", "trade", "job", "agribusiness", "mechanization", "all"]);
+const allowedScopeTypes = new Set(["all", "crop_type", "crop_product", "livestock_type", "livestock_product", "trade_group"]);
 
 function flag(value: unknown) { return value === true || value === 1 || value === "1" ? 1 : 0; }
 function nullableId(value: unknown) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : null; }
@@ -56,6 +56,14 @@ async function canonicalScopeValues(scopeType: string, input: unknown) {
   const raw = Array.isArray(input) ? input : [];
   const requested = [...new Set(raw.map((v) => String(v).trim()).filter(Boolean))];
   if (!requested.length) return { values: [], error: "Select at least one scope value" };
+  if (scopeType === "crop_product" || scopeType === "livestock_product") {
+    const sourceType = scopeType === "crop_product" ? "crop" : "livestock";
+    const placeholders = requested.map(() => "?").join(",");
+    const rows = await query<any[]>(`SELECT DISTINCT name FROM works WHERE source_type=? AND name IN (${placeholders}) AND is_active=1`, [sourceType, ...requested]);
+    const values = rows.map((row) => String(row.name));
+    if (values.length !== requested.length) return { values: [], error: "One or more selected products do not exist or are inactive" };
+    return { values, error: null };
+  }
   const table = scopeType === "crop_type" ? "crop_types" : scopeType === "livestock_type" ? "livestock_types" : null;
   if (!table) return { values: requested, error: null };
   const placeholders = requested.map(() => "?").join(",");
