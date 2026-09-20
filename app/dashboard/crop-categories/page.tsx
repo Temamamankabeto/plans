@@ -17,9 +17,10 @@ type Api<T> = { success: boolean; message: string; data: T };
 type Row = { id: number | string; name: string; code?: string | null; is_active?: boolean | number; crop_type_id?: number | string; crop_type_category_id?: number | string | null; crop_id?: number | string; crop_type_name?: string; crop_type_category_name?: string; crop_name?: string };
 type Kind = "all" | "Crop Type" | "Type Category" | "Crop" | "Crop Category";
 type HierarchyRow = Row & { key: string; level: number; kind: Exclude<Kind, "all">; parent: string };
-type CreateForm = { name: string; code: string; is_active: string; crop_type_id: string; crop_type_category_id: string; crop_id: string };
+type ProductOption = { id:number; name:string; unit?:string|null; crop_id?:number|null; is_active?:boolean|number };
+type CreateForm = { product_ids:string[]; name: string; code: string; is_active: string; crop_type_id: string; crop_type_category_id: string; crop_id: string };
 
-const emptyForm: CreateForm = { name: "", code: "", is_active: "active", crop_type_id: "", crop_type_category_id: "", crop_id: "" };
+const emptyForm: CreateForm = { product_ids: [], name: "", code: "", is_active: "active", crop_type_id: "", crop_type_category_id: "", crop_id: "" };
 const active = (v: unknown) => v === true || v === 1 || v === "1";
 const sameId = (a: unknown, b: unknown) => String(a ?? "") === String(b ?? "");
 
@@ -35,6 +36,7 @@ export default function CropCategoriesPage() {
   const [typeCats, setTypeCats] = useState<Row[]>([]);
   const [crops, setCrops] = useState<Row[]>([]);
   const [cats, setCats] = useState<Row[]>([]);
+  const [cropProducts, setCropProducts] = useState<ProductOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
@@ -50,13 +52,14 @@ export default function CropCategoriesPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [a, b, c, d] = await Promise.all([
+      const [a, b, c, d, products] = await Promise.all([
         request<Row[]>("/api/admin/crop-types?all=1"),
         request<Row[]>("/api/admin/crop-type-categories?all=1"),
         request<Row[]>("/api/admin/crops?all=1"),
         request<Row[]>("/api/admin/crop-categories?all=1"),
+        request<ProductOption[]>("/api/admin/works?all=1&source_type=crop&status=active"),
       ]);
-      setTypes(Array.isArray(a) ? a : []); setTypeCats(Array.isArray(b) ? b : []); setCrops(Array.isArray(c) ? c : []); setCats(Array.isArray(d) ? d : []);
+      setTypes(Array.isArray(a) ? a : []); setTypeCats(Array.isArray(b) ? b : []); setCrops(Array.isArray(c) ? c : []); setCats(Array.isArray(d) ? d : []); setCropProducts(Array.isArray(products)?products:[]);
       setExpanded(new Set((Array.isArray(a) ? a : []).map((x) => `t-${x.id}`)));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to load crop hierarchy");
@@ -116,6 +119,7 @@ export default function CropCategoriesPage() {
       const payload: Record<string, unknown> = { name: form.name.trim(), code: form.code.trim() || undefined, is_active: form.is_active === "active" };
       if (createKind === "Type Category" || createKind === "Crop") payload.crop_type_id = Number(form.crop_type_id);
       if (createKind === "Crop" && form.crop_type_category_id) payload.crop_type_category_id = Number(form.crop_type_category_id);
+      if (createKind === "Crop") payload.product_ids = form.product_ids.map(Number);
       if (createKind === "Crop Category") payload.crop_id = Number(form.crop_id);
       await request(endpoint, { method: "POST", body: JSON.stringify(payload) });
       toast.success(`${createKind} created successfully`); setDialogOpen(false); await load();
@@ -151,6 +155,7 @@ export default function CropCategoriesPage() {
       {createKind === "Crop Category" && <div className="space-y-2"><Label>Crop *</Label><Select value={form.crop_id} onValueChange={(v) => setForm((f) => ({ ...f, crop_id: v }))} disabled={!form.crop_type_id}><SelectTrigger><SelectValue placeholder="Select crop"/></SelectTrigger><SelectContent>{selectedCrops.filter((x) => active(x.is_active)).map((x) => <SelectItem key={x.id} value={String(x.id)}>{x.name}</SelectItem>)}</SelectContent></Select></div>}
       <div className="space-y-2"><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder={createKind === "Crop Category" ? "e.g. Durum Wheat" : `Enter ${createKind.toLowerCase()} name`} required/></div>
       <div className="space-y-2"><Label>Code</Label><Input value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))} placeholder="Auto-generated when empty"/></div>
+      {createKind === "Crop" && <div className="space-y-2"><Label>Products</Label><div className="max-h-44 space-y-2 overflow-y-auto rounded-md border p-3">{cropProducts.filter(p=>!p.crop_id).length===0?<p className="text-sm text-muted-foreground">No unassigned Crop products. Register them from Products first.</p>:cropProducts.filter(p=>!p.crop_id).map(p=>{const id=String(p.id),checked=form.product_ids.includes(id);return <label key={p.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/60"><input type="checkbox" checked={checked} onChange={()=>setForm(f=>({...f,product_ids:checked?f.product_ids.filter(v=>v!==id):[...f.product_ids,id]}))}/><span className="text-sm font-medium">{p.name}</span>{p.unit&&<span className="text-xs text-muted-foreground">({p.unit})</span>}</label>})}</div><p className="text-xs text-muted-foreground">Only products registered with Source Type = Crop are shown.</p></div>}
       <div className="space-y-2"><Label>Status</Label><Select value={form.is_active} onValueChange={(v) => setForm((f) => ({ ...f, is_active: v }))}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
       <DialogFooter><Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancel</Button><Button type="submit" disabled={saving || !form.name.trim() || ((createKind === "Type Category" || createKind === "Crop") && !form.crop_type_id) || (createKind === "Crop Category" && !form.crop_id)}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}Save {createKind}</Button></DialogFooter>
     </form></DialogContent></Dialog>
