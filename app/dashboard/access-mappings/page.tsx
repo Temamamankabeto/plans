@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  useAccessMappingsQuery, useAccessOrganizationOptionsQuery, useAccessScopeOptionsQuery,
+  useAccessMappingsQuery, useAccessOrganizationOptionsQuery, useAccessProductParentsQuery, useAccessScopeOptionsQuery,
   useCreateAccessMappingMutation, useDeleteAccessMappingMutation, useUpdateAccessMappingMutation,
   useUserRolesLiteQuery,
 } from "@/hooks";
@@ -47,10 +47,12 @@ export default function AccessMappingsPage(){
   const [departmentFilter,setDepartmentFilter]=useState("all");
   const [directorateFilter,setDirectorateFilter]=useState("all");
   const [teamFilter,setTeamFilter]=useState("all");
+  const [productParentIds,setProductParentIds]=useState<number[]>([]);
   const mappings=useAccessMappingsQuery();
   const roles=useUserRolesLiteQuery();
   const organizations=useAccessOrganizationOptionsQuery();
-  const scopeOptions=useAccessScopeOptionsQuery(form.scope_type);
+  const productParents=useAccessProductParentsQuery(form.scope_type);
+  const scopeOptions=useAccessScopeOptionsQuery(form.scope_type,productParentIds);
   const create=useCreateAccessMappingMutation(()=>{close();toast.success("Access mapping created");});
   const update=useUpdateAccessMappingMutation(()=>{close();toast.success("Access mapping updated");});
   const remove=useDeleteAccessMappingMutation();
@@ -92,10 +94,11 @@ export default function AccessMappingsPage(){
   function clearFilters(){setOfficeFilter("all");setDepartmentFilter("all");setDirectorateFilter("all");setTeamFilter("all");}
   const title=useMemo(()=>editingId?"Edit Role Access":"Create Role Access",[editingId]);
 
-  function close(){setOpen(false);setEditingId(null);setForm(empty);}
-  function openCreate(){setEditingId(null);setForm(empty);setOpen(true);}
+  function close(){setOpen(false);setEditingId(null);setProductParentIds([]);setForm(empty);}
+  function openCreate(){setEditingId(null);setProductParentIds([]);setForm(empty);setOpen(true);}
   function openEdit(m:OrganizationAccessMapping){
     setEditingId(m.id);
+    setProductParentIds([]);
     setForm({
       role_id:m.role_id,office_id:m.office_id,department_id:m.department_id,directorate_id:m.directorate_id,team_id:m.team_id,
       module:m.module,scope_type:m.scope_type,scope_values:m.scope_values??[],
@@ -113,7 +116,8 @@ export default function AccessMappingsPage(){
     if(!option)return;
     setForm(c=>({...c,office_id:option.office_id,department_id:option.department_id,directorate_id:option.directorate_id,team_id:option.team_id}));
   }
-  function setModule(module:AccessModule){setForm(c=>({...c,module,scope_type:scopeForModule(module),scope_values:[]}));}
+  function setModule(module:AccessModule){setProductParentIds([]);setForm(c=>({...c,module,scope_type:scopeForModule(module),scope_values:[]}));}
+  function toggleProductParent(id:number){setProductParentIds(current=>current.includes(id)?current.filter(x=>x!==id):[...current,id]);}
   function toggleScope(name:string){setForm(c=>({...c,scope_values:c.scope_values.includes(name)?c.scope_values.filter(x=>x!==name):[...c.scope_values,name]}));}
   function submit(){
     if(!form.role_id){toast.error("Role is required");return;}
@@ -167,10 +171,22 @@ export default function AccessMappingsPage(){
         <Field label="Module *"><Select value={form.module} onValueChange={v=>setModule(v as AccessModule)}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{MODULES.map(m=><SelectItem key={m} value={m} className="capitalize">{m==="crop_product"?"Crop Product":m==="livestock_product"?"Livestock Product":m}</SelectItem>)}</SelectContent></Select></Field>
       </div>
 
+      {(form.scope_type==="crop_product"||form.scope_type==="livestock_product")&&<Field label={form.scope_type==="crop_product"?"Allowed Crops *":"Allowed Livestock *"}>
+        <div className="rounded-lg border p-3">
+          <div className="mb-3 text-sm text-muted-foreground">Tick one or more {form.scope_type==="crop_product"?"crops":"livestock"}. Products assigned to any checked item will appear below.</div>
+          <div className="grid max-h-56 gap-2 overflow-y-auto md:grid-cols-2">
+            {(productParents.data??[]).map(o=><label key={o.id} className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm">
+              <input type="checkbox" checked={productParentIds.includes(o.id)} onChange={()=>toggleProductParent(o.id)}/>
+              <span>{o.name}{form.scope_type==="livestock_product"&&o.sex?` (${o.sex})`:""}</span>
+            </label>)}
+          </div>
+        </div>
+      </Field>}
+
       {["crop_type","crop_product","livestock_type","livestock_product"].includes(form.scope_type)?<Field label={form.scope_type==="crop_type"?"Allowed Crop Types *":form.scope_type==="crop_product"?"Allowed Crop Products *":form.scope_type==="livestock_type"?"Allowed Livestock Types *":"Allowed Livestock Products *"}>
         <div className="rounded-lg border p-3">
-          <div className="mb-3 flex min-h-8 flex-wrap gap-2">{form.scope_values.length?form.scope_values.map(v=><button type="button" key={v} onClick={()=>toggleScope(v)} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">{v}<X className="h-3 w-3"/></button>):<span className="text-sm text-muted-foreground">Select one or more values below</span>}</div>
-          <div className="grid max-h-56 gap-2 overflow-y-auto md:grid-cols-2">{(scopeOptions.data??[]).map(o=><label key={o.id} className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm"><input type="checkbox" checked={form.scope_values.includes(o.name)} onChange={()=>toggleScope(o.name)}/>{o.name}</label>)}</div>
+          <div className="mb-3 flex min-h-8 flex-wrap gap-2">{form.scope_values.length?form.scope_values.map(v=><button type="button" key={v} onClick={()=>toggleScope(v)} className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm">{v}<X className="h-3 w-3"/></button>):<span className="text-sm text-muted-foreground">{(form.scope_type==="crop_product"||form.scope_type==="livestock_product")&&!productParentIds.length?(form.scope_type==="crop_product"?"Tick crop(s) first":"Tick livestock first"):"Select one or more values below"}</span>}</div>
+          {(form.scope_type==="crop_product"||form.scope_type==="livestock_product")&&!productParentIds.length?<div className="rounded-md bg-muted/30 p-3 text-sm text-muted-foreground">{form.scope_type==="crop_product"?"Products will appear after you tick one or more crops.":"Products will appear after you tick one or more livestock."}</div>:<div className="grid max-h-56 gap-2 overflow-y-auto md:grid-cols-2">{(scopeOptions.data??[]).length?(scopeOptions.data??[]).map(o=><label key={o.id} className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm"><input type="checkbox" checked={form.scope_values.includes(o.name)} onChange={()=>toggleScope(o.name)}/>{o.name}</label>):<p className="col-span-2 text-sm text-muted-foreground">No assigned products found for the selected {form.scope_type==="crop_product"?"crop":"livestock"}.</p>}</div>}
         </div>
       </Field>:form.scope_type==="all"?<div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">This module does not require a Crop/Livestock scope.</div>:null}
 
