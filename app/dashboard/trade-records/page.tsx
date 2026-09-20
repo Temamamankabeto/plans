@@ -17,11 +17,11 @@ const ETHIOPIAN_MONTHS = ["Meskerem","Tikimt","Hidar","Tahsas","Tir","Yekatit","
 const FISCAL_YEARS = ["2018","2019","2020","2021"];
 type ValueType = "price" | "cost";
 type BusinessAreaOption = { id: number; name: string };
-type ProductOption = { id: number; name: string; work_type_id: number };
+type ProductOption = { id: number; name: string; work_type_id: number; source_type?: "crop" | "livestock"; livestock_product_id?: number | null };
 
 type TradeRecord = {
   id: number; annual_plan_id?: number | null; fiscal_year: string; month?: string | null;
-  period_type: "annual" | "monthly"; commodity_group: string; commodity: string; scope_type?: "crop_type" | "livestock_type"; scope_value?: string; unit: string;
+  period_type: "annual" | "monthly"; commodity_group: string; access_module?: "crop" | "livestock" | "livestock_product"; commodity: string; scope_type?: "crop_type" | "livestock_type"; scope_value?: string; unit: string;
   value_type?: ValueType | null;
   plan_product: number; plan_price: number; plan_income: number;
   achievement_product: number; achievement_price: number; achievement_income: number;
@@ -29,7 +29,7 @@ type TradeRecord = {
   employment_male_achievement: number; employment_female_achievement: number;
   directorate_name?: string; team_name?: string; status: string; review_comment?: string | null;
 };
-type Access = { canCreate: boolean; canUpdate: boolean; canApprove: boolean; canReport: boolean; groups: string[]; modules?: string[]; cropTypes?: string[]; livestockTypes?: string[] };
+type Access = { canCreate: boolean; canUpdate: boolean; canApprove: boolean; canReport: boolean; groups: string[]; modules?: string[]; cropTypes?: string[]; livestockTypes?: string[]; livestockProductTypes?: string[] };
 type CropType = { id:number; name:string };
 type Crop = { id:number; name:string; crop_type_id?:number|null; crop_type_name?:string|null };
 type LivestockType = { id:number; name:string };
@@ -37,7 +37,7 @@ type Livestock = { id:number; name:string; livestock_type_id?:number|null; lives
 type PlanningSettings = { fiscal_year: string; fiscal_years?: string[]; annual_plan_open: boolean | number; monthly_plan_open: boolean | number; monthly_achievement_open: boolean | number };
 
 const emptyForm = {
-  fiscal_year: "2018", month: "Meskerem", commodity_group: "", commodity: "", scope_type: "crop_type", scope_value: "", unit: "Unit",
+  fiscal_year: "2018", month: "Meskerem", commodity_group: "", access_module: "crop", commodity: "", scope_type: "crop_type", scope_value: "", unit: "Unit",
   value_type: "price" as ValueType,
   plan_product: "0", plan_price: "0", plan_income: "0",
   achievement_product: "0", achievement_price: "0", achievement_income: "0",
@@ -95,16 +95,24 @@ export default function TradeRecordsPage() {
     return()=>{active=false};
   },[]);
 
-  const assignedModules=(access.modules ?? []).filter((m)=>m==="crop"||m==="livestock");
+  const assignedModules=(access.modules ?? []).filter((m)=>m==="crop"||m==="livestock"||m==="livestock_product");
   const assignedCropTypes=access.cropTypes ?? [];
   const assignedLivestockTypes=access.livestockTypes ?? [];
+  const assignedLivestockProductTypes=access.livestockProductTypes ?? [];
   const hasAssignedCrops=assignedModules.includes("crop") && assignedCropTypes.length>0;
   const hasAssignedLivestock=assignedModules.includes("livestock") && assignedLivestockTypes.length>0;
-  const isLivestockMarket=form.scope_type==="livestock_type";
+  const isLivestockMarket=form.access_module==="livestock";
+  const isLivestockProductMarket=form.access_module==="livestock_product";
+  const isLivestockFamily=isLivestockMarket||isLivestockProductMarket;
   const selectedCropType=cropTypes.find(x=>x.name===form.scope_value);
   const selectedLivestockType=livestockTypes.find(x=>x.name===form.scope_value);
   const cropOptions=crops.filter(x=>selectedCropType && (Number(x.crop_type_id)===Number(selectedCropType.id) || x.crop_type_name===selectedCropType.name));
   const livestockOptions=livestock.filter(x=>selectedLivestockType && (Number(x.livestock_type_id)===Number(selectedLivestockType.id) || x.livestock_type_name===selectedLivestockType.name));
+  const livestockProductOptions=products.filter((product)=>{
+    if(product.source_type!=="livestock" || !product.livestock_product_id || !selectedLivestockType) return false;
+    const sourceLivestock=livestock.find((item)=>Number(item.id)===Number(product.livestock_product_id));
+    return Boolean(sourceLivestock && (Number(sourceLivestock.livestock_type_id)===Number(selectedLivestockType.id) || sourceLivestock.livestock_type_name===selectedLivestockType.name));
+  });
 
   // Button visibility must follow the exact logged-in user's resolved access mapping.
   // Do not hide it because master data has not loaded yet; openAnnual validates
@@ -141,10 +149,11 @@ export default function TradeRecordsPage() {
   function openAnnual() {
     const firstMarketType=businessAreas[0]?.name ?? "";
     const firstModule=assignedModules.includes("crop") ? "crop" : assignedModules[0] ?? (hasAssignedCrops ? "crop" : "livestock");
-    const firstScopeType: "crop_type" | "livestock_type" = firstModule==="livestock" ? "livestock_type" : "crop_type";
-    const firstScopeValue=firstScopeType==="crop_type" ? assignedCropTypes[0] ?? "" : assignedLivestockTypes[0] ?? "";
+    const firstScopeType: "crop_type" | "livestock_type" = firstModule==="crop" ? "crop_type" : "livestock_type";
+    const firstAllowedTypes=firstModule==="crop" ? assignedCropTypes : firstModule==="livestock_product" ? assignedLivestockProductTypes : assignedLivestockTypes;
+    const firstScopeValue=firstAllowedTypes[0] ?? "";
     setForm((c) => ({
-      ...c, commodity_group:firstMarketType, scope_type:firstScopeType, scope_value:firstScopeValue, commodity:"",
+      ...c, commodity_group:firstMarketType, access_module:firstModule, scope_type:firstScopeType, scope_value:firstScopeValue, commodity:"",
       value_type:"price", plan_product:"0", plan_price:"0", plan_income:"0",
     }));
     setAnnualOpen(true);
@@ -152,6 +161,11 @@ export default function TradeRecordsPage() {
 
   function updateBusinessArea(value: string) {
     setForm((c) => ({ ...c, commodity_group:value }));
+  }
+  function updateModule(value:string) {
+    const scopeType: "crop_type" | "livestock_type" = value==="crop" ? "crop_type" : "livestock_type";
+    const allowed=value==="crop" ? assignedCropTypes : value==="livestock_product" ? assignedLivestockProductTypes : assignedLivestockTypes;
+    setForm((c)=>({...c,access_module:value,scope_type:scopeType,scope_value:allowed[0]??"",commodity:""}));
   }
   function updateAssignedType(value:string) {
     setForm((c)=>({...c,scope_value:value,commodity:""}));
@@ -308,27 +322,30 @@ export default function TradeRecordsPage() {
             </SelectContent></Select></Field>
 
           <Field label="Module">
-            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
-              {form.scope_type==="livestock_type" ? "Livestock" : "Crop"}
-            </div>
+            {assignedModules.length<=1 ? <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
+              {form.access_module==="livestock_product" ? "Livestock Product" : form.access_module==="livestock" ? "Livestock" : "Crop"}
+            </div> : <Select value={form.access_module} onValueChange={updateModule}>
+              <SelectTrigger><SelectValue placeholder="Select assigned module" /></SelectTrigger>
+              <SelectContent className="z-[100] bg-white">{assignedModules.map((m)=><SelectItem key={m} value={m}>{m==="livestock_product"?"Livestock Product":m==="livestock"?"Livestock":"Crop"}</SelectItem>)}</SelectContent>
+            </Select>}
           </Field>
 
           <Field label="Allowed Types">
             <Select value={form.scope_value} onValueChange={updateAssignedType}>
-              <SelectTrigger><SelectValue placeholder={isLivestockMarket ? "Select allowed livestock type" : "Select allowed crop type"} /></SelectTrigger>
+              <SelectTrigger><SelectValue placeholder={isLivestockFamily ? "Select allowed livestock type" : "Select allowed crop type"} /></SelectTrigger>
               <SelectContent className="z-[100] max-h-64 overflow-y-auto bg-white">
-                {(form.scope_type==="livestock_type" ? assignedLivestockTypes : assignedCropTypes).length===0
+                {(form.access_module==="crop" ? assignedCropTypes : form.access_module==="livestock_product" ? assignedLivestockProductTypes : assignedLivestockTypes).length===0
                   ? <SelectItem value="__none" disabled>No allowed types assigned</SelectItem>
-                  : (form.scope_type==="livestock_type" ? assignedLivestockTypes : assignedCropTypes)
+                  : (form.access_module==="crop" ? assignedCropTypes : form.access_module==="livestock_product" ? assignedLivestockProductTypes : assignedLivestockTypes)
                       .map((name)=><SelectItem key={name} value={name}>{name}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
 
-          <Field label={isLivestockMarket ? "Livestock" : "Crop"}><Select value={form.commodity} onValueChange={(v)=>setForm({...form,commodity:v})}>
-            <SelectTrigger><SelectValue placeholder={isLivestockMarket ? "Select livestock" : "Select crop"} /></SelectTrigger>
+          <Field label={isLivestockProductMarket ? "Livestock Product" : isLivestockMarket ? "Livestock" : "Crop"}><Select value={form.commodity} onValueChange={(v)=>setForm({...form,commodity:v})}>
+            <SelectTrigger><SelectValue placeholder={isLivestockProductMarket ? "Select livestock product" : isLivestockMarket ? "Select livestock" : "Select crop"} /></SelectTrigger>
             <SelectContent className="z-[100] max-h-64 overflow-y-auto bg-white">
-              {(isLivestockMarket ? livestockOptions : cropOptions).map((x)=><SelectItem key={x.id} value={x.name}>{x.name}</SelectItem>)}
+              {(isLivestockProductMarket ? livestockProductOptions : isLivestockMarket ? livestockOptions : cropOptions).map((x)=><SelectItem key={x.id} value={x.name}>{x.name}</SelectItem>)}
             </SelectContent></Select></Field>
 
           <NumberField label="Quantity" value={form.plan_product} onChange={(v)=>setForm({...form,plan_product:v})} />

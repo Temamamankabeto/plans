@@ -99,6 +99,7 @@ export async function POST(request:NextRequest) {
   const body=await request.json().catch(()=>({}));
   const periodType=String(body.period_type ?? "annual");
   let businessArea=String(body.commodity_group ?? "").trim();
+  let accessModule=String(body.access_module ?? "").trim().toLowerCase();
   let product=String(body.commodity ?? "").trim();
   let scopeType=String(body.scope_type ?? "").trim();
   let scopeValue=String(body.scope_value ?? "").trim();
@@ -127,6 +128,7 @@ export async function POST(request:NextRequest) {
     if(!annual) return fail("Annual plan not found",404);
     if(annual.status!=="approved") return fail("Monthly plan can be created only after annual plan is approved",422);
     businessArea=String(annual.commodity_group);
+    accessModule=String(annual.access_module ?? (annual.scope_type==="livestock_type"?"livestock":"crop")).trim().toLowerCase();
     product=String(annual.commodity);
     scopeType=String(annual.scope_type ?? scopeType);
     scopeValue=String(annual.scope_value ?? scopeValue);
@@ -140,14 +142,17 @@ export async function POST(request:NextRequest) {
   }
 
   const mappings=await getUserAccessMappings(Number(auth.id));
-  const expectedModule=scopeType==="livestock_type" ? "livestock" : "crop";
+  const expectedModule=accessModule || (scopeType==="livestock_type" ? "livestock" : "crop");
+  if(!["crop","livestock","livestock_product"].includes(expectedModule)) return fail("Invalid assigned module",422);
+  if(expectedModule==="crop" && scopeType!=="crop_type") return fail("Crop module requires a Crop Type",422);
+  if((expectedModule==="livestock"||expectedModule==="livestock_product") && scopeType!=="livestock_type") return fail("Livestock modules require a Livestock Type",422);
   const allowedScope=mappings.some((m:any)=>
     String(m.module ?? "").trim().toLowerCase()===expectedModule &&
     m.scope_type===scopeType &&
     String(m.scope_value ?? "").toLowerCase()===scopeValue.toLowerCase()
   );
   if(!isSuperAdmin(auth.roles)&&!allowedScope)
-    return fail("The selected Crop/Livestock Type is not assigned to your role and organization",403);
+    return fail("The selected type is not assigned to this module for your role and organization",403);
 
   if(scopeType==="crop_type"){
     const rows=await query<any[]>(
@@ -156,13 +161,23 @@ export async function POST(request:NextRequest) {
       [scopeValue,product]
     );
     if(!rows[0]) return fail("The selected Crop does not belong to the assigned Crop Type",422);
-  } else if(scopeType==="livestock_type"){
+  } else if(scopeType==="livestock_type" && expectedModule==="livestock"){
     const rows=await query<any[]>(
       `SELECT lp.id FROM livestock_products lp INNER JOIN livestock_types lt ON lt.id=lp.livestock_type_id
        WHERE lp.is_active=1 AND lt.is_active=1 AND LOWER(lt.name)=LOWER(?) AND LOWER(lp.name)=LOWER(?) LIMIT 1`,
       [scopeValue,product]
     );
     if(!rows[0]) return fail("The selected Livestock does not belong to the assigned Livestock Type",422);
+  } else if(scopeType==="livestock_type" && expectedModule==="livestock_product"){
+    const rows=await query<any[]>(
+      `SELECT w.id FROM works w
+       INNER JOIN livestock_products lp ON lp.id=w.livestock_product_id
+       INNER JOIN livestock_types lt ON lt.id=lp.livestock_type_id
+       WHERE w.is_active=1 AND w.source_type='livestock' AND lp.is_active=1 AND lt.is_active=1
+         AND LOWER(lt.name)=LOWER(?) AND LOWER(w.name)=LOWER(?) LIMIT 1`,
+      [scopeValue,product]
+    );
+    if(!rows[0]) return fail("The selected Livestock Product does not belong to the assigned Livestock Type",422);
   } else return fail("Invalid assigned scope type",422);
 
   if(periodType==="annual"){
@@ -178,12 +193,12 @@ export async function POST(request:NextRequest) {
     const [saved]:any=await connection.execute(
       `INSERT INTO trade_records (
         annual_plan_id,office_id,directorate_id,team_id,fiscal_year,month,period_type,
-        commodity_group,scope_type,scope_value,commodity,stage,unit,value_type,plan_product,plan_price,plan_income,
+        commodity_group,access_module,scope_type,scope_value,commodity,stage,unit,value_type,plan_product,plan_price,plan_income,
         employment_male_plan,employment_female_plan,status,created_by
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'submitted',?)`,
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'submitted',?)`,
       [
         annualPlanId,user.office_id,user.directorate_id,user.team_id ?? null,fiscalYear,month,periodType,
-        businessArea,scopeType,scopeValue,product,stage,unit,valueType,quantity,value,total,
+        businessArea,expectedModule,scopeType,scopeValue,product,stage,unit,valueType,quantity,value,total,
         Number(body.employment_male_plan ?? 0),Number(body.employment_female_plan ?? 0),auth.id,
       ],
     );

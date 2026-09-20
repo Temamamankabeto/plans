@@ -1,4 +1,4 @@
-export type AccessModule = "crop" | "livestock" | "trade" | "job" | "agribusiness" | "mechanization" | "all";
+export type AccessModule = "crop" | "livestock" | "livestock_product" | "trade" | "job" | "agribusiness" | "mechanization" | "all";
 export type AccessScopeType = "crop_type" | "livestock_type" | "trade_group" | "all";
 export type AccessOrganizationLevel = "office" | "department" | "directorate" | "team";
 

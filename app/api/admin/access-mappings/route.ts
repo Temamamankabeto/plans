@@ -3,7 +3,7 @@ import { getAuthUser } from "@/lib/server/auth";
 import { query, transaction } from "@/lib/server/db";
 import { created, fail, ok } from "@/lib/server/response";
 
-const allowedModules = new Set(["crop", "livestock", "trade", "job", "agribusiness", "mechanization", "all"]);
+const allowedModules = new Set(["crop", "livestock", "livestock_product", "trade", "job", "agribusiness", "mechanization", "all"]);
 const allowedScopeTypes = new Set(["all", "crop_type", "livestock_type", "trade_group"]);
 
 function flag(value: unknown) { return value === true || value === 1 || value === "1" ? 1 : 0; }
