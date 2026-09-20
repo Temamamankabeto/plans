@@ -50,7 +50,7 @@ type ApiResponse<T> = {
   };
 };
 
-type ProductOption = { id:number; name:string; unit?:string|null; crop_id?:number|null; is_active?:boolean|number };
+type ProductOption = { id:number; name:string; unit?:string|null; crop_id?:number|null; crop_ids?:string|null; is_active?:boolean|number };
 
 type CropForm = {
   product_ids: string[];
@@ -189,7 +189,7 @@ export default function CropsPage() {
   function openEdit(crop: CropItem) {
     setSelectedCrop(crop);
     setForm({
-      product_ids: cropProducts.filter(p=>String(p.crop_id??"")===String(crop.id)).map(p=>String(p.id)),
+      product_ids: cropProducts.filter(p=>(p.crop_ids??"").split(",").includes(String(crop.id))).map(p=>String(p.id)),
       crop_type_id: String(crop.crop_type_id ?? ""),
       crop_type_category_id: String(crop.crop_type_category_id ?? ""),
       name: crop.name ?? "",
@@ -469,7 +469,7 @@ export default function CropsPage() {
               </div>
 
 
-              <div className="space-y-2"><Label>Products</Label><div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">{cropProducts.filter(p=>!p.crop_id||String(p.crop_id)===String(selectedCrop?.id??"")).length===0?<p className="text-sm text-muted-foreground">No Crop products are registered. Create them from Products first.</p>:cropProducts.filter(p=>!p.crop_id||String(p.crop_id)===String(selectedCrop?.id??"")).map(p=>{const id=String(p.id),checked=form.product_ids.includes(id);return <label key={p.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/60"><input type="checkbox" checked={checked} onChange={()=>setForm(c=>({...c,product_ids:checked?c.product_ids.filter(v=>v!==id):[...c.product_ids,id]}))}/><span className="text-sm font-medium">{p.name}</span>{p.unit&&<span className="text-xs text-muted-foreground">({p.unit})</span>}</label>})}</div><p className="text-xs text-muted-foreground">Only products registered with Source Type = Crop are shown.</p></div>
+              <div className="space-y-2"><Label>Products</Label><div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">{cropProducts.length===0?<p className="text-sm text-muted-foreground">No Crop products are registered. Create them from Products first.</p>:cropProducts.map(p=>{const id=String(p.id),checked=form.product_ids.includes(id);return <label key={p.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/60"><input type="checkbox" checked={checked} onChange={()=>setForm(c=>({...c,product_ids:checked?c.product_ids.filter(v=>v!==id):[...c.product_ids,id]}))}/><span className="text-sm font-medium">{p.name}</span>{p.unit&&<span className="text-xs text-muted-foreground">({p.unit})</span>}</label>})}</div><p className="text-xs text-muted-foreground">Only products registered with Source Type = Crop are shown.</p></div>
 
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="space-y-2">

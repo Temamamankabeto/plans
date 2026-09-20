@@ -6,7 +6,9 @@ import { validateWorkInput } from "@/lib/schemas/work.schema";
 
 const makeCode=(name:string,parent:number)=>`${parent}_${name}`.toUpperCase().replace(/[^A-Z0-9]+/g,"_").replace(/^_+|_+$/g,"").slice(0,80);
 const joins=` FROM works w LEFT JOIN work_types wt ON wt.id=w.work_type_id LEFT JOIN crops c ON c.id=w.crop_id LEFT JOIN crop_categories cc ON cc.id=w.crop_category_id LEFT JOIN livestock_products lp ON lp.id=w.livestock_product_id `;
-const select=`SELECT w.id,w.work_type_id,w.source_type,w.crop_id,w.crop_category_id,w.livestock_product_id,w.name,w.code,w.unit,w.description,w.is_active,w.created_at,w.updated_at,wt.name work_type_name,c.name crop_name,cc.name crop_category_name,lp.name livestock_product_name ${joins}`;
+const select=`SELECT w.id,w.work_type_id,w.source_type,w.crop_id,w.crop_category_id,w.livestock_product_id,w.name,w.code,w.unit,w.description,w.is_active,w.created_at,w.updated_at,wt.name work_type_name,c.name crop_name,cc.name crop_category_name,lp.name livestock_product_name,
+ (SELECT GROUP_CONCAT(wc.crop_id ORDER BY wc.crop_id) FROM work_crop wc WHERE wc.work_id=w.id) AS crop_ids,
+ (SELECT GROUP_CONCAT(wl.livestock_id ORDER BY wl.livestock_id) FROM work_livestock wl WHERE wl.work_id=w.id) AS livestock_ids ${joins}`;
 
 export async function GET(r:NextRequest){
  const all=r.nextUrl.searchParams.get("all"),search=r.nextUrl.searchParams.get("search")?.trim()??"",status=r.nextUrl.searchParams.get("status")??"all",area=r.nextUrl.searchParams.get("work_type_id"),source=r.nextUrl.searchParams.get("source_type"); const where:string[]=[],p:unknown[]=[];

@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     [cropTypeId, cropTypeCategoryId, name, code, landAreaUnit, productivityUnit, productionUnit, isActive],
   );
   const productIds = Array.isArray(body.product_ids) ? body.product_ids.map(Number).filter((id: number) => Number.isInteger(id) && id > 0) : [];
-  if (productIds.length) { const marks=productIds.map(()=>"?").join(","); await execute(`UPDATE works SET crop_id=?, crop_category_id=NULL, livestock_product_id=NULL WHERE source_type='crop' AND id IN (${marks})`, [result.insertId,...productIds]); }
+  for (const workId of productIds) await execute("INSERT IGNORE INTO work_crop (work_id,crop_id) SELECT id,? FROM works WHERE id=? AND source_type='crop'", [result.insertId,workId]);
 
   return created(
     {

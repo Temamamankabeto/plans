@@ -86,8 +86,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   );
   if (Array.isArray(body.product_ids)) {
     const productIds=body.product_ids.map(Number).filter((v:number)=>Number.isInteger(v)&&v>0);
-    await execute("UPDATE works SET crop_id=NULL, crop_category_id=NULL WHERE source_type='crop' AND crop_id=?",[id]);
-    if(productIds.length){const marks=productIds.map(()=>"?").join(",");await execute(`UPDATE works SET crop_id=?, crop_category_id=NULL, livestock_product_id=NULL WHERE source_type='crop' AND id IN (${marks})`,[id,...productIds]);}
+    await execute("DELETE FROM work_crop WHERE crop_id=?",[id]);
+    for (const workId of productIds) await execute("INSERT IGNORE INTO work_crop (work_id,crop_id) SELECT id,? FROM works WHERE id=? AND source_type='crop'",[id,workId]);
   }
 
   return ok(
