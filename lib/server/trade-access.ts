@@ -87,10 +87,11 @@ export function applyTradeReadScope(where:string[],params:unknown[],user:any,acc
     where.push(`EXISTS (SELECT 1 FROM directorates scope_d WHERE scope_d.id=${alias}.directorate_id AND scope_d.department_id=?)`);
     params.push(user.department_id);
   }
-  if(access.groups.length&&access.groups.length<ALL_TRADE_GROUPS.length){
-    where.push(`${alias}.commodity_group IN (${access.groups.map(()=>"?").join(",")})`);
-    params.push(...access.groups);
-  }
+  // Do not filter commodity_group by the legacy hard-coded Trade groups here.
+  // commodity_group now stores the selected Market Type/Business Area (for example
+  // "Export Market"), while authorization is resolved separately from the user's
+  // dynamic module/type access mapping. Organizational scope above is the read
+  // boundary for the records created by that team/directorate/office.
 }
 export async function validateTradeWriteScope(data:{commodity_group?:string|null},user:any,roles:string[]=[]){
   if(isSuperAdmin(roles))return null;

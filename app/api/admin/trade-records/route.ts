@@ -53,7 +53,11 @@ export async function GET(request:NextRequest) {
   const month=request.nextUrl.searchParams.get("month") ?? "";
   const status=request.nextUrl.searchParams.get("status") ?? "all";
   const where:string[]=[]; const params:unknown[]=[];
-  applyTradeReadScope(where,params,user,access,"tr");
+  // Pass roles so the read scope can correctly apply Team Leader/Expert -> team,
+  // Director -> directorate, and office-level organizational boundaries.
+  // The previous call passed the resolved access object, which discarded role
+  // information inside applyTradeReadScope and could return an incorrect list.
+  applyTradeReadScope(where,params,user,auth.roles,"tr");
   if(periodType!=="all"){where.push("tr.period_type=?");params.push(periodType);}
   if(fiscalYear){where.push("tr.fiscal_year=?");params.push(fiscalYear);}
   if(month){where.push("tr.month=?");params.push(month);}
