@@ -106,7 +106,12 @@ export default function TradeRecordsPage() {
   const cropOptions=crops.filter(x=>selectedCropType && (Number(x.crop_type_id)===Number(selectedCropType.id) || x.crop_type_name===selectedCropType.name));
   const livestockOptions=livestock.filter(x=>selectedLivestockType && (Number(x.livestock_type_id)===Number(selectedLivestockType.id) || x.livestock_type_name===selectedLivestockType.name));
 
-  const canCreateAnnualPlan = access.canCreate && businessAreas.length > 0 && assignedModules.length > 0 && (hasAssignedCrops || hasAssignedLivestock) && Number(settings?.annual_plan_open ?? 1) === 1;
+  // Button visibility must follow the exact logged-in user's resolved access mapping.
+  // Do not hide it because master data has not loaded yet; openAnnual validates
+  // the module/type data before opening the form.
+  const canCreateAnnualPlan =
+    access.canCreate &&
+    Number(settings?.annual_plan_open ?? 1) === 1;
   const planCalculated = calculated(form.plan_product, form.plan_price);
   const achievementCalculated = calculated(form.achievement_product, form.achievement_price);
 
@@ -121,21 +126,7 @@ export default function TradeRecordsPage() {
         api.get("/admin/trade-records/access"),
       ]);
       setRecords(response.data.data ?? []);
-      const nextAccess = accessResponse.data?.data ?? response.data.meta?.access ?? { canCreate:false, canUpdate:false, canApprove:false, canReport:false, groups:[] };
-      setAccess(nextAccess);
-      const nextModules=(nextAccess.modules ?? []).filter((m:string)=>m==="crop"||m==="livestock");
-      const nextModule=nextModules[0];
-      const nextScopeType: "crop_type"|"livestock_type"|undefined =
-        nextModule==="livestock" ? "livestock_type" : nextModule==="crop" ? "crop_type" : undefined;
-      const nextAllowed=nextScopeType==="livestock_type" ? (nextAccess.livestockTypes ?? []) : (nextAccess.cropTypes ?? []);
-      if(nextScopeType){
-        setForm((current)=>({
-          ...current,
-          scope_type:nextScopeType,
-          scope_value:nextAllowed.includes(current.scope_value) ? current.scope_value : (nextAllowed[0] ?? ""),
-          commodity:nextAllowed.includes(current.scope_value) ? current.commodity : "",
-        }));
-      }
+      setAccess(accessResponse.data?.data ?? response.data.meta?.access ?? { canCreate:false, canUpdate:false, canApprove:false, canReport:false, groups:[] });
       const nextSettings = settingsResponse.data?.data as PlanningSettings;
       setSettings(nextSettings);
       setBusinessAreas(areasResponse.data?.data ?? []);
@@ -317,31 +308,9 @@ export default function TradeRecordsPage() {
             </SelectContent></Select></Field>
 
           <Field label="Module">
-            {assignedModules.length > 1 ? (
-              <Select
-                value={form.scope_type==="livestock_type" ? "livestock" : "crop"}
-                onValueChange={(module)=>{
-                  const nextType: "crop_type"|"livestock_type" = module==="livestock" ? "livestock_type" : "crop_type";
-                  const nextAllowed = nextType==="crop_type" ? assignedCropTypes : assignedLivestockTypes;
-                  setForm((current)=>({
-                    ...current,
-                    scope_type:nextType,
-                    scope_value:nextAllowed[0] ?? "",
-                    commodity:"",
-                  }));
-                }}
-              >
-                <SelectTrigger><SelectValue placeholder="Select assigned module" /></SelectTrigger>
-                <SelectContent className="z-[100] bg-white">
-                  {assignedModules.includes("crop") && <SelectItem value="crop">Crop</SelectItem>}
-                  {assignedModules.includes("livestock") && <SelectItem value="livestock">Livestock</SelectItem>}
-                </SelectContent>
-              </Select>
-            ) : (
-              <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
-                {assignedModules[0]==="livestock" ? "Livestock" : "Crop"}
-              </div>
-            )}
+            <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted/40 px-3 text-sm font-medium text-foreground">
+              {form.scope_type==="livestock_type" ? "Livestock" : "Crop"}
+            </div>
           </Field>
 
           <Field label="Allowed Types">
