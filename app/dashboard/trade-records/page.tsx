@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { BarChart3, CheckCircle2, MessageSquare, Plus, RefreshCw, Send, TrendingUp } from "lucide-react";
+import { BarChart3, CheckCircle2, MessageSquare, Pencil, Plus, RefreshCw, Send, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ type TradeRecord = {
   achievement_product: number; achievement_price: number; achievement_income: number;
   employment_male_plan: number; employment_female_plan: number;
   employment_male_achievement: number; employment_female_achievement: number;
-  directorate_name?: string; team_name?: string; status: string; review_comment?: string | null;
+  directorate_name?: string; team_name?: string; status: string; review_comment?: string | null; created_by?: number;
 };
 type Access = { canCreate: boolean; canUpdate: boolean; canApprove: boolean; canReport: boolean; groups: string[]; modules?: string[]; cropTypes?: string[]; livestockTypes?: string[]; livestockProductTypes?: string[] };
 type CropType = { id:number; name:string };
@@ -70,6 +70,7 @@ export default function TradeRecordsPage() {
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [annualOpen, setAnnualOpen] = useState(false);
+  const [editingAnnual, setEditingAnnual] = useState<TradeRecord | null>(null);
   const [monthlyOpen, setMonthlyOpen] = useState(false);
   const [achievementOpen, setAchievementOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -147,6 +148,7 @@ export default function TradeRecordsPage() {
   useEffect(() => { load(); }, []);
 
   function openAnnual() {
+    setEditingAnnual(null);
     const firstMarketType=businessAreas[0]?.name ?? "";
     const firstModule=assignedModules.includes("crop") ? "crop" : assignedModules[0] ?? (hasAssignedCrops ? "crop" : "livestock");
     const firstScopeType: "crop_type" | "livestock_type" = firstModule==="crop" ? "crop_type" : "livestock_type";
@@ -171,15 +173,40 @@ export default function TradeRecordsPage() {
     setForm((c)=>({...c,scope_value:value,commodity:""}));
   }
 
+  function openEditAnnual(row: TradeRecord) {
+    setEditingAnnual(row);
+    setForm((c) => ({
+      ...c,
+      fiscal_year: row.fiscal_year,
+      commodity_group: row.commodity_group,
+      access_module: row.access_module ?? (row.scope_type === "livestock_type" ? "livestock" : "crop"),
+      scope_type: row.scope_type ?? (row.access_module === "crop" ? "crop_type" : "livestock_type"),
+      scope_value: row.scope_value ?? "",
+      commodity: row.commodity,
+      unit: row.unit || "Unit",
+      value_type: row.value_type === "cost" ? "cost" : "price",
+      plan_product: String(row.plan_product ?? 0),
+      plan_price: String(row.plan_price ?? 0),
+      plan_income: String(row.plan_income ?? 0),
+      employment_male_plan: String(row.employment_male_plan ?? 0),
+      employment_female_plan: String(row.employment_female_plan ?? 0),
+    }));
+    setAnnualOpen(true);
+  }
+
   async function saveAnnual(event: FormEvent) {
     event.preventDefault();
     try {
-      await api.post("/admin/trade-records", {
-        ...form, period_type:"annual", plan_income:planCalculated,
-      });
-      toast.success("Annual plan submitted successfully");
-      setAnnualOpen(false); await load();
-    } catch (error:any) { toast.error(error.message || "Failed to save annual plan"); }
+      const payload = { ...form, period_type:"annual", plan_income:planCalculated };
+      if (editingAnnual) {
+        await api.patch(`/admin/trade-records/${editingAnnual.id}`, { action:"update_plan", ...payload });
+        toast.success("Annual plan updated successfully");
+      } else {
+        await api.post("/admin/trade-records", payload);
+        toast.success("Annual plan submitted successfully");
+      }
+      setAnnualOpen(false); setEditingAnnual(null); await load();
+    } catch (error:any) { toast.error(error.message || (editingAnnual ? "Failed to update annual plan" : "Failed to save annual plan")); }
   }
 
   function openMonthly(row: TradeRecord) {
@@ -267,6 +294,8 @@ export default function TradeRecordsPage() {
             <TableCell><span className="font-medium">{resultLabel(row.value_type)}:</span> {numberFormat(row.plan_income)}</TableCell>
             <TableCell><Badge variant="secondary">{row.status}</Badge></TableCell>
             <TableCell className="text-right"><div className="flex justify-end gap-2">
+              {access.canUpdate && row.status !== "approved" && <Button size="sm" variant="outline" onClick={() => openEditAnnual(row)}>
+                <Pencil className="mr-1 h-4 w-4" /> Edit</Button>}
               {access.canCreate && row.status === "approved" && <Button size="sm" variant="outline"
                 disabled={Number(settings?.monthly_plan_open ?? 1)!==1} onClick={() => openMonthly(row)}>Divide Monthly</Button>}
               {access.canApprove && row.status !== "approved" && <Button size="sm"
@@ -306,9 +335,9 @@ export default function TradeRecordsPage() {
       </Table></div>
     </section>
 
-    <Dialog open={annualOpen} onOpenChange={setAnnualOpen}>
+    <Dialog open={annualOpen} onOpenChange={(open) => { setAnnualOpen(open); if (!open) setEditingAnnual(null); }}>
       <DialogContent className="max-w-4xl bg-white">
-        <DialogHeader><DialogTitle>Create Annual Plan</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{editingAnnual ? "Edit Annual Plan" : "Create Annual Plan"}</DialogTitle></DialogHeader>
         <form onSubmit={saveAnnual} className="grid gap-4 md:grid-cols-3">
           <Field label="Fiscal Year"><Select value={form.fiscal_year} onValueChange={(v) => setForm({...form,fiscal_year:v})}>
             <SelectTrigger><SelectValue /></SelectTrigger><SelectContent className="z-[100] max-h-64 bg-white">
@@ -360,8 +389,8 @@ export default function TradeRecordsPage() {
           <NumberField label="Employment Male" value={form.employment_male_plan} onChange={(v)=>setForm({...form,employment_male_plan:v})} />
           <NumberField label="Employment Female" value={form.employment_female_plan} onChange={(v)=>setForm({...form,employment_female_plan:v})} />
           <div className="md:col-span-3 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={()=>setAnnualOpen(false)}>Cancel</Button>
-            <Button type="submit"><Send className="mr-2 h-4 w-4" /> Submit</Button>
+            <Button type="button" variant="outline" onClick={()=>{ setAnnualOpen(false); setEditingAnnual(null); }}>Cancel</Button>
+            <Button type="submit"><Send className="mr-2 h-4 w-4" /> {editingAnnual ? "Update" : "Submit"}</Button>
           </div>
         </form>
       </DialogContent>
